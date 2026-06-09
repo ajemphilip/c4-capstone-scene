@@ -1,0 +1,18 @@
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude Code session metadata
+.claude/
+
+# Logs
+*.log
+
+# Dependencies (none right now — no build step — but in case anyone adds them)
+node_modules/
+
+# Build output (placeholder for future)
+dist/
+build/
