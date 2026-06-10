@@ -13,12 +13,12 @@ import React, {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, ContactShadows, Instances, Instance, Sky, Text } from "@react-three/drei";
+import { OrbitControls, ContactShadows, Instances, Instance } from "@react-three/drei";
 import {
   Physics, useBox, useSphere, usePlane,
   useConeTwistConstraint, usePointToPointConstraint,
 } from "@react-three/cannon";
-import { EffectComposer, Bloom, Vignette, HueSaturation, BrightnessContrast } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, Vignette, LUT, DepthOfField } from "@react-three/postprocessing";
 import * as THREE from "three";
 import htm from "htm";
 
@@ -106,14 +106,14 @@ const MOUNTAINS = [
 
 function hillHeight(x, z) {
   const d = Math.sqrt(x * x + z * z);
-  /* Flat valley floor inside r=34 — covers the building grid + perimeter
-     loop. Past that, terrain rises as a valley wall (smoothstep ramp)
-     with sinusoidal hills and Gaussian mountain peaks layered on top. */
-  if (d <= 34) return 0;
-  // Smoothstep valley wall: 0 at r=34, ~12m at r=80, max 16m at r=120
-  const wallT = Math.min(1, (d - 34) / 86);
+  /* Flat valley floor inside r=42 — covers the building grid, the
+     perimeter loop INCLUDING its corners (r≈31.6), the sidewalk ring,
+     and the four gate monuments (r≤34) with a green apron before the
+     hills start. Prevents terrain from rising against the road. */
+  if (d <= 42) return 0;
+  const wallT = Math.min(1, (d - 42) / 86);
   const wall = wallT * wallT * (3 - 2 * wallT) * 16;
-  const fade = Math.min(1, (d - 34) / 12);
+  const fade = Math.min(1, (d - 42) / 12);
   let h =
     Math.sin(x * 0.04)              * 2.8 +
     Math.cos(z * 0.035)             * 2.2 +
@@ -125,7 +125,10 @@ function hillHeight(x, z) {
     const r2 = dx * dx + dz * dz;
     h += p.h * Math.exp(-r2 / (p.r * p.r));
   }
-  return wall + h;
+  // Horizon erosion: past ~170m the terrain rolls downward, so the far
+  // edge sinks beneath the fog band instead of silhouetting the horizon.
+  const roll = Math.max(0, d - 170);
+  return wall + h - roll * roll * 0.0016;
 }
 
 function Ground() {
@@ -139,7 +142,9 @@ function Ground() {
     // We pass -localY to keep the hillHeight(world_x, world_z) convention
     // that trees / tents / turbines also use — otherwise mountain peaks
     // are mirrored on Z and decorations float above flat ground.
-    const g = new THREE.PlaneGeometry(440, 440, 110, 110);
+    // 820m wide so the terrain edge sits ≥290m from any allowed camera
+    // position — past full-fog distance, so no visible horizon line.
+    const g = new THREE.PlaneGeometry(820, 820, 130, 130);
     const pos = g.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       pos.setZ(i, hillHeight(pos.getX(i), -pos.getY(i)));
@@ -283,36 +288,55 @@ function buildingColor() {
 const BUILDINGS = [];
 const GRID_COLS = 9, GRID_ROWS = 6;
 const CELL_W = 5.8, CELL_D = 5.8;
-const FOOD_BANK_CELL    = { col: 4, row: 5 };  // front-center  → ConnectionSculpture
-const SHELTER_CELL      = { col: 6, row: 4 };
 const LIBRARY_CELL      = { col: 5, row: 1 };
-const THRESHOLD_CELL    = { col: 4, row: 0 };  // back-center   → ThresholdSculpture
-const AFFORDABILITY_CELL = { col: 2, row: 5 }; // front-left    → AffordabilitySculpture
-const TRANSITION_CELL    = { col: 6, row: 5 }; // front-right   → TransitionSculpture
-const FOOD_BANK = {
-  x: (FOOD_BANK_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
-  z: (FOOD_BANK_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
-};
-const SHELTER = {
-  x: (SHELTER_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
-  z: (SHELTER_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
-};
 const LIBRARY = {
   x: (LIBRARY_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
   z: (LIBRARY_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
 };
-const THRESHOLD = {
-  x: (THRESHOLD_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
-  z: (THRESHOLD_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
-};
-const AFFORDABILITY = {
-  x: (AFFORDABILITY_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
-  z: (AFFORDABILITY_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
-};
-const TRANSITION = {
-  x: (TRANSITION_CELL.col - (GRID_COLS - 1) / 2) * CELL_W,
-  z: (TRANSITION_CELL.row - (GRID_ROWS - 1) / 2) * CELL_D,
-};
+
+/* Shelter + Food Bank flank the south gate on the road's inner edge —
+   the two community services and the Connection monument share the most
+   visible side of the city. */
+const FOODBANK_POS = { x: -11.6, z: 13.8 };
+const SHELTER      = { x:  11.6, z: 13.8 };
+
+/* The four monuments stand INSIDE the city at the midpoint of each side,
+   pressed against the inner edge of the perimeter road — visible from the
+   streets and framed by the city around them.
+   Loop road inner edges: x=±24.8, z=±16.8. Plinth radius = 2.8 × 1.6 ≈ 4.5. */
+const FOOD_BANK     = { x: 0,     z:  12.3 };  // South edge → ConnectionSculpture
+const THRESHOLD     = { x: 0,     z: -12.3 };  // North edge → ThresholdSculpture
+const AFFORDABILITY = { x: -20.3, z:  0    };  // West edge  → AffordabilitySculpture
+const TRANSITION    = { x: 20.3,  z:  0    };  // East edge  → TransitionSculpture
+
+const SCULPT_SCALE = 1.6;
+
+/* Hard-collision data for the flock: monument centers + keep-out radius. */
+const SCULPT_CENTERS = [FOOD_BANK, THRESHOLD, AFFORDABILITY, TRANSITION];
+const SCULPT_RADIUS = 5.4;   // plinth (2.8 × 1.6) + walking margin
+
+/* Clear every grid cell whose center falls inside a monument plaza or a
+   civic-building footprint so towers never crowd them. */
+const SCULPT_CLEAR = new Set();
+{
+  const keepOuts = [
+    ...SCULPT_CENTERS.map((p) => ({ p, r: 6.4 })),
+    { p: FOODBANK_POS, r: 6.0 },
+    { p: SHELTER, r: 6.0 },
+  ];
+  for (let col = 0; col < GRID_COLS; col++) {
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const cx = (col - (GRID_COLS - 1) / 2) * CELL_W;
+      const cz = (row - (GRID_ROWS - 1) / 2) * CELL_D;
+      for (const k of keepOuts) {
+        if (Math.hypot(cx - k.p.x, cz - k.p.z) < k.r) {
+          SCULPT_CLEAR.add(col * 100 + row);
+          break;
+        }
+      }
+    }
+  }
+}
 
 /* Pick a handful of grid cells to become city parks instead of buildings. */
 const PARK_CELLS = new Set();
@@ -322,8 +346,8 @@ const PARK_CELLS = new Set();
     tries++;
     const col = Math.floor(Math.random() * GRID_COLS);
     const row = Math.floor(Math.random() * GRID_ROWS);
-    if (col === FOOD_BANK_CELL.col && row === FOOD_BANK_CELL.row) continue;
-    if (col === SHELTER_CELL.col   && row === SHELTER_CELL.row) continue;
+    if (SCULPT_CLEAR.has(col * 100 + row)) continue;
+    if (col === LIBRARY_CELL.col && row === LIBRARY_CELL.row) continue;
     const cx = (col - (GRID_COLS - 1) / 2) * CELL_W;
     const cz = (row - (GRID_ROWS - 1) / 2) * CELL_D;
     if (Math.abs(cx) < 5.5 && Math.abs(cz) < 5.5) continue;
@@ -342,26 +366,94 @@ for (const key of PARK_CELLS) {
 
 for (let col = 0; col < GRID_COLS; col++) {
   for (let row = 0; row < GRID_ROWS; row++) {
-    if (col === FOOD_BANK_CELL.col && row === FOOD_BANK_CELL.row) continue;
-    if (col === SHELTER_CELL.col   && row === SHELTER_CELL.row) continue;
+    if (SCULPT_CLEAR.has(col * 100 + row)) continue;
     if (col === LIBRARY_CELL.col   && row === LIBRARY_CELL.row) continue;
-    if (col === THRESHOLD_CELL.col && row === THRESHOLD_CELL.row) continue;
-    if (col === AFFORDABILITY_CELL.col && row === AFFORDABILITY_CELL.row) continue;
-    if (col === TRANSITION_CELL.col    && row === TRANSITION_CELL.row) continue;
     if (PARK_CELLS.has(col * 100 + row)) continue;
     const cx = (col - (GRID_COLS - 1) / 2) * CELL_W + (Math.random() - 0.5) * 0.9;
     const cz = (row - (GRID_ROWS - 1) / 2) * CELL_D + (Math.random() - 0.5) * 0.9;
     if (Math.abs(cx) < 5.5 && Math.abs(cz) < 5.5) continue;   // open plaza
     if (Math.random() < 0.16) continue;                    // empty lots
+    const bColor = buildingColor();
+    const w = 2.6 + Math.random() * 0.9;
+    const h = 3.2 + Math.random() * 6.5;
+    const d = 2.6 + Math.random() * 0.9;
+    // Shape variety: ~12% cylindrical towers; tall boxes may get a
+    // setback second tier (classic stepped urban silhouette).
+    const shape = Math.random() < 0.12 ? "cyl" : "box";
+    const t2 = shape === "box" && h > 5.6 && Math.random() < 0.45
+      ? { w: w * 0.62, d: d * 0.62, h: 1.5 + Math.random() * 1.5 }
+      : null;
     BUILDINGS.push({
       x: cx,
       z: cz,
-      w: 2.6 + Math.random() * 0.9,        // tighter width range
-      h: 3.2 + Math.random() * 6.5,        // shorter + less variance
-      d: 2.6 + Math.random() * 0.9,
+      w, h, d,
       ry: 0,
-      color: buildingColor(),
+      shape,
+      t2,
+      color: bColor,
+      // Derived trim colors for the roof cap + ground-floor band
+      roofColor: "#" + new THREE.Color(bColor).multiplyScalar(0.72).getHexString(),
+      baseColor: "#" + new THREE.Color(bColor).multiplyScalar(0.86).getHexString(),
       groundY: hillHeight(cx, cz),
+    });
+  }
+}
+
+/* Shape-filtered views + rooftop detail layers. */
+const BOX_BLDGS = BUILDINGS.filter((b) => b.shape === "box");
+const CYL_BLDGS = BUILDINGS.filter((b) => b.shape === "cyl");
+const TIERED_BLDGS = BOX_BLDGS.filter((b) => b.t2);
+
+/* Rooftop clutter — AC units, water tanks (box buildings only; tiered
+   buildings put their gear on the upper tier). */
+const ROOF_UNITS = [];
+const ROOF_TANKS = [];
+for (const b of BOX_BLDGS) {
+  const tw = b.t2 ? b.t2.w : b.w;
+  const td = b.t2 ? b.t2.d : b.d;
+  const topY = b.groundY + b.h + (b.t2 ? b.t2.h : 0);
+  if (Math.random() < 0.55) {
+    ROOF_UNITS.push({
+      x: b.x + (Math.random() - 0.5) * tw * 0.45,
+      z: b.z + (Math.random() - 0.5) * td * 0.45,
+      y: topY + 0.16,
+      s: 0.5 + Math.random() * 0.5,
+      ry: Math.random() * Math.PI,
+    });
+  }
+  if (Math.random() < 0.30) {
+    ROOF_TANKS.push({
+      x: b.x + (Math.random() - 0.5) * tw * 0.4,
+      z: b.z + (Math.random() - 0.5) * td * 0.4,
+      y: topY + 0.45,
+      s: 0.7 + Math.random() * 0.5,
+    });
+  }
+}
+
+/* Rooftop parapet railings — thin frame around ~40% of box roofs. */
+const ROOF_RAILS = [];
+for (const b of BOX_BLDGS) {
+  if (Math.random() > 0.4) continue;
+  const tw = (b.t2 ? b.t2.w : b.w) + 0.06;
+  const td = (b.t2 ? b.t2.d : b.d) + 0.06;
+  const railY = b.groundY + b.h + (b.t2 ? b.t2.h : 0) + 0.18 + 0.10;
+  ROOF_RAILS.push({ x: b.x, z: b.z + td / 2, y: railY, len: tw, ry: 0 });
+  ROOF_RAILS.push({ x: b.x, z: b.z - td / 2, y: railY, len: tw, ry: 0 });
+  ROOF_RAILS.push({ x: b.x + tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
+  ROOF_RAILS.push({ x: b.x - tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
+}
+
+/* Cylindrical towers get horizontal floor bands instead of windows. */
+const CYL_BANDS = [];
+for (const b of CYL_BLDGS) {
+  const floors = Math.floor(b.h / 1.2);
+  for (let f = 1; f <= floors; f++) {
+    CYL_BANDS.push({
+      x: b.x, z: b.z,
+      y: b.groundY + f * 1.2 - 0.25,
+      w: b.w + 0.06,
+      color: b.roofColor,
     });
   }
 }
@@ -370,29 +462,35 @@ for (let col = 0; col < GRID_COLS; col++) {
    Two pools: dark glass and lit (emissive). */
 const BUILDING_WINDOWS_DARK = [];
 const BUILDING_WINDOWS_LIT  = [];
-const WIN_W = 0.50, WIN_H = 0.65;
+const BUILDING_WINDOWS_DUSK = [];   // dark glass by day, light up at dusk
+const WIN_W = 0.34, WIN_H = 0.50;
 for (const b of BUILDINGS) {
-  const floors  = Math.max(1, Math.floor(b.h / 1.2));
-  const colsW   = Math.max(2, Math.floor(b.w / 0.9));
-  const colsD   = Math.max(2, Math.floor(b.d / 0.9));
+  if (b.shape === "cyl") continue;   // round towers use floor bands instead
+  const floors  = Math.max(1, Math.floor(b.h / 0.95));
+  const colsW   = Math.max(2, Math.floor(b.w / 0.62));
+  const colsD   = Math.max(2, Math.floor(b.d / 0.62));
   const faces = [
     { axis: "z", sign:  1, ry: 0,            cols: colsW, range: b.w, offset: b.d / 2 + 0.025 },
     { axis: "z", sign: -1, ry: Math.PI,      cols: colsW, range: b.w, offset: b.d / 2 + 0.025 },
     { axis: "x", sign: -1, ry: -Math.PI / 2, cols: colsD, range: b.d, offset: b.w / 2 + 0.025 },
     { axis: "x", sign:  1, ry:  Math.PI / 2, cols: colsD, range: b.d, offset: b.w / 2 + 0.025 },
   ];
-  // Only front + back faces — skipping side faces halves window count.
-  const usedFaces = faces.slice(0, 2);
+  // All four faces — higher-fidelity buildings read from every angle.
+  const usedFaces = faces;
   for (const f of usedFaces) {
     for (let fl = 0; fl < floors; fl++) {
-      const wy = 0.75 + fl * 1.2;
+      const wy = 1.0 + fl * 0.95;   // dense grid, first row clears the base band
       if (wy + WIN_H / 2 > b.h - 0.2) break;
       for (let c = 0; c < f.cols; c++) {
         const t = (c + 0.5) / f.cols - 0.5;
         const wx = b.x + t * f.range;
         const wz = b.z + f.sign * f.offset;
-        const lit = Math.random() < 0.12;
-        (lit ? BUILDING_WINDOWS_LIT : BUILDING_WINDOWS_DARK).push({
+        // 12% always lit, +22% come on only at dusk, rest stay dark
+        const roll = Math.random();
+        const pool = roll < 0.12 ? BUILDING_WINDOWS_LIT
+                   : roll < 0.34 ? BUILDING_WINDOWS_DUSK
+                   : BUILDING_WINDOWS_DARK;
+        pool.push({
           pos: [wx, wy + b.groundY, wz],
           ry: f.ry,
         });
@@ -405,6 +503,8 @@ if (BUILDING_WINDOWS_LIT.length === 0 && BUILDING_WINDOWS_DARK.length > 0) {
 }
 
 function BuildingDetails() {
+  // The lit materials register into CYCLE_REFS — the DayCycle controller
+  // drives their emissive intensity/color continuously with time of day.
   return html`
     <group>
       <${Instances} limit=${Math.max(1, BUILDING_WINDOWS_DARK.length)}>
@@ -414,9 +514,11 @@ function BuildingDetails() {
           <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
         `)}
       </${Instances}>
+      <!-- Always-lit windows — burn brighter once the sun drops -->
       <${Instances} limit=${Math.max(1, BUILDING_WINDOWS_LIT.length)}>
         <planeGeometry args=${[WIN_W, WIN_H]} />
         <meshStandardMaterial
+          ref=${(m) => (CYCLE_REFS.litMat = m)}
           color="#ffd28a"
           emissive="#ff9c4a"
           emissiveIntensity=${0.55}
@@ -424,6 +526,21 @@ function BuildingDetails() {
           toneMapped=${false}
         />
         ${BUILDING_WINDOWS_LIT.map((w, i) => html`
+          <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
+        `)}
+      </${Instances}>
+      <!-- Dusk/night windows — dark glass by day, light up after sunset -->
+      <${Instances} limit=${Math.max(1, BUILDING_WINDOWS_DUSK.length)}>
+        <planeGeometry args=${[WIN_W, WIN_H]} />
+        <meshStandardMaterial
+          ref=${(m) => (CYCLE_REFS.duskMat = m)}
+          color="#161c2a"
+          emissive="#000000"
+          emissiveIntensity=${0}
+          roughness=${0.4}
+          toneMapped=${false}
+        />
+        ${BUILDING_WINDOWS_DUSK.map((w, i) => html`
           <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
         `)}
       </${Instances}>
@@ -451,6 +568,7 @@ function _signTexture(label, color) {
 }
 const FOODBANK_SIGN_TEX = _signTexture("FOODBANK", "#e23030");
 const SHELTER_SIGN_TEX  = _signTexture("SHELTER",  "#2a5878");
+
 
 /* Tileable "wall of money" texture: dark green base with gold $ glyphs. */
 const DOLLAR_WALL_TEX = (() => {
@@ -487,7 +605,7 @@ const DOLLAR_WALL_TEX = (() => {
    with sign panels and warm light spilling out the door.
    ========================================================= */
 function FoodBank() {
-  const x = FOOD_BANK.x, z = FOOD_BANK.z;
+  const x = FOODBANK_POS.x, z = FOODBANK_POS.z;
   return html`
     <group position=${[x, 0, z]}>
       <!-- Main building — taller and chunkier -->
@@ -657,7 +775,8 @@ function ConnectionSculpture() {
   }, []);
 
   return html`
-    <group ref=${groupRef} position=${[FOOD_BANK.x, 0, FOOD_BANK.z]}>
+    <group ref=${groupRef} position=${[FOOD_BANK.x, 0, FOOD_BANK.z]} scale=${SCULPT_SCALE}
+      onClick=${(e) => openGoal(e, "connection")}>
       <!-- Plinth — wide outer ring -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.5, 2.7, 0.3, 32]} />
@@ -776,7 +895,8 @@ function TransitionSculpture() {
   ];
 
   return html`
-    <group ref=${groupRef} position=${[TRANSITION.x, 0, TRANSITION.z]}>
+    <group ref=${groupRef} position=${[TRANSITION.x, 0, TRANSITION.z]} scale=${SCULPT_SCALE}
+      onClick=${(e) => openGoal(e, "transition")}>
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -786,6 +906,10 @@ function TransitionSculpture() {
         <cylinderGeometry args=${[2.2, 2.35, 0.24, 32]} />
         <meshStandardMaterial color="#3a3a3a" roughness=${0.6} metalness=${0.4} />
       </mesh>
+
+      <!-- Content normalized so all four monuments stand equally tall;
+           pivot at the platform top (y=0.54) keeps feet planted -->
+      <group position=${[0, 0.54 * (1 - 1.28), 0]} scale=${1.28}>
 
       <!-- Staircase: 4 steps rising in the +z direction -->
       ${figures.map((_, i) => {
@@ -861,6 +985,7 @@ function TransitionSculpture() {
 
       <!-- Warm point light at the top step — the goal -->
       <pointLight position=${[0, 4.2, 1.1]} color="#ffd28a" intensity=${4} distance=${14} />
+      </group>
     </group>
   `;
 }
@@ -894,7 +1019,8 @@ function ThresholdSculpture() {
   ];
 
   return html`
-    <group ref=${groupRef} position=${[THRESHOLD.x, 0, THRESHOLD.z]}>
+    <group ref=${groupRef} position=${[THRESHOLD.x, 0, THRESHOLD.z]} scale=${SCULPT_SCALE}
+      onClick=${(e) => openGoal(e, "threshold")}>
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -904,6 +1030,9 @@ function ThresholdSculpture() {
         <cylinderGeometry args=${[2.2, 2.35, 0.24, 32]} />
         <meshStandardMaterial color="#3a3a3a" roughness=${0.6} metalness=${0.4} />
       </mesh>
+
+      <!-- Content normalized so all four monuments stand equally tall -->
+      <group position=${[0, 0.54 * (1 - 0.95), 0]} scale=${0.95}>
 
       <!-- Left pillar -->
       <mesh position=${[-1.5, 2.85, 0]} castShadow>
@@ -1014,6 +1143,7 @@ function ThresholdSculpture() {
             emissiveIntensity=${1.2} toneMapped=${false} />
         </mesh>
       </group>
+      </group>
     </group>
   `;
 }
@@ -1021,14 +1151,17 @@ function ThresholdSculpture() {
 /* Stacked-bills pile geometry: layered boxes that get smaller as they
    rise, forming a mound that almost buries the house — only the roof
    peaks through. Slight jitter on each layer for organic stacking. */
+/* Tall money tower — vertical like the other monuments instead of a
+   squat mound, so it reads at the same visual weight. */
 const PILE_LAYERS = [
-  { y: 0.45, w: 3.2, h: 0.55, d: 2.4, xj:  0.00, zj:  0.00, ry:  0.00 },
-  { y: 1.00, w: 2.8, h: 0.50, d: 2.1, xj: -0.10, zj:  0.10, ry:  0.05 },
-  { y: 1.50, w: 2.4, h: 0.50, d: 1.85, xj:  0.12, zj: -0.08, ry: -0.07 },
-  { y: 1.97, w: 2.0, h: 0.45, d: 1.55, xj: -0.05, zj:  0.05, ry:  0.10 },
-  { y: 2.42, w: 1.65, h: 0.45, d: 1.30, xj:  0.08, zj: -0.10, ry: -0.06 },
-  { y: 2.85, w: 1.3, h: 0.40, d: 1.05, xj: -0.04, zj:  0.07, ry:  0.12 },
-  { y: 3.22, w: 0.95, h: 0.35, d: 0.80, xj:  0.05, zj: -0.04, ry: -0.09 },
+  { y: 0.50, w: 2.70, h: 0.62, d: 2.10, xj:  0.00, zj:  0.00, ry:  0.00 },
+  { y: 1.10, w: 2.45, h: 0.58, d: 1.90, xj: -0.09, zj:  0.08, ry:  0.05 },
+  { y: 1.66, w: 2.20, h: 0.55, d: 1.70, xj:  0.10, zj: -0.07, ry: -0.07 },
+  { y: 2.20, w: 1.95, h: 0.52, d: 1.52, xj: -0.05, zj:  0.05, ry:  0.10 },
+  { y: 2.71, w: 1.70, h: 0.50, d: 1.34, xj:  0.07, zj: -0.08, ry: -0.06 },
+  { y: 3.20, w: 1.45, h: 0.48, d: 1.16, xj: -0.04, zj:  0.06, ry:  0.12 },
+  { y: 3.67, w: 1.20, h: 0.45, d: 0.98, xj:  0.04, zj: -0.04, ry: -0.09 },
+  { y: 4.12, w: 0.95, h: 0.42, d: 0.80, xj: -0.03, zj:  0.03, ry:  0.07 },
 ];
 
 function AffordabilitySculpture() {
@@ -1037,19 +1170,23 @@ function AffordabilitySculpture() {
     if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
   });
   return html`
-    <group ref=${groupRef} position=${[AFFORDABILITY.x, 0, AFFORDABILITY.z]}>
-      <!-- Plinth -->
+    <group ref=${groupRef} position=${[AFFORDABILITY.x, 0, AFFORDABILITY.z]} scale=${SCULPT_SCALE}
+      onClick=${(e) => openGoal(e, "affordability")}>
+      <!-- Plinth — same two-tier dimensions as the other monuments -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
-        <cylinderGeometry args=${[3.0, 3.2, 0.3, 36]} />
+        <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
         <meshStandardMaterial color="#2a2a2a" roughness=${0.7} metalness=${0.4} />
       </mesh>
       <mesh position=${[0, 0.42, 0]} castShadow receiveShadow>
-        <cylinderGeometry args=${[2.6, 2.75, 0.24, 32]} />
+        <cylinderGeometry args=${[2.2, 2.35, 0.24, 32]} />
         <meshStandardMaterial color="#3a3a3a" roughness=${0.6} metalness=${0.4} />
       </mesh>
 
+      <!-- Content normalized so all four monuments stand equally tall -->
+      <group position=${[0, 0.54 * (1 - 0.90), 0]} scale=${0.90}>
+
       <!-- PERSON on the left, reaching out toward the pile -->
-      <group position=${[-2.5, 0, 0]}>
+      <group position=${[-1.95, 0, 0]}>
         <mesh position=${[0, 1.25, 0]} castShadow>
           <cylinderGeometry args=${[0.22, 0.26, 1.5, 16]} />
           <meshStandardMaterial color="#a8b8c8" roughness=${0.75} />
@@ -1072,18 +1209,18 @@ function AffordabilitySculpture() {
            only the pyramidal roof and chimney peeking above. -->
       <group position=${[0.2, 0, 0]}>
         <!-- Body (tall, mostly hidden by the pile) -->
-        <mesh position=${[0, 1.75, 0]} castShadow receiveShadow>
-          <boxGeometry args=${[1.4, 3.5, 1.2]} />
+        <mesh position=${[0, 2.1, 0]} castShadow receiveShadow>
+          <boxGeometry args=${[1.25, 4.2, 1.05]} />
           <meshStandardMaterial color="#e8a060" roughness=${0.85} />
         </mesh>
         <!-- Pyramidal roof — sticks out above the pile -->
-        <mesh position=${[0, 4.0, 0]} castShadow rotation=${[0, Math.PI / 4, 0]}>
-          <coneGeometry args=${[1.05, 1.0, 4]} />
+        <mesh position=${[0, 4.55, 0]} castShadow rotation=${[0, Math.PI / 4, 0]}>
+          <coneGeometry args=${[0.95, 0.95, 4]} />
           <meshStandardMaterial color="#a05030" roughness=${0.9} />
         </mesh>
         <!-- Chimney peeking above the pile -->
-        <mesh position=${[0.45, 4.3, 0.30]} castShadow>
-          <boxGeometry args=${[0.25, 0.7, 0.25]} />
+        <mesh position=${[0.40, 5.0, 0.28]} castShadow>
+          <boxGeometry args=${[0.22, 0.6, 0.22]} />
           <meshStandardMaterial color="#a05030" roughness=${0.9} />
         </mesh>
       </group>
@@ -1103,7 +1240,7 @@ function AffordabilitySculpture() {
               map=${DOLLAR_WALL_TEX}
               emissive="#ecc560"
               emissiveMap=${DOLLAR_WALL_TEX}
-              emissiveIntensity=${0.30}
+              emissiveIntensity=${0.55}
               toneMapped=${false}
               roughness=${0.55}
             />
@@ -1115,7 +1252,7 @@ function AffordabilitySculpture() {
               map=${DOLLAR_WALL_TEX}
               emissive="#ecc560"
               emissiveMap=${DOLLAR_WALL_TEX}
-              emissiveIntensity=${0.30}
+              emissiveIntensity=${0.55}
               toneMapped=${false}
               roughness=${0.55}
             />
@@ -1127,7 +1264,7 @@ function AffordabilitySculpture() {
               map=${DOLLAR_WALL_TEX}
               emissive="#ecc560"
               emissiveMap=${DOLLAR_WALL_TEX}
-              emissiveIntensity=${0.30}
+              emissiveIntensity=${0.55}
               toneMapped=${false}
               roughness=${0.55}
             />
@@ -1139,7 +1276,7 @@ function AffordabilitySculpture() {
               map=${DOLLAR_WALL_TEX}
               emissive="#ecc560"
               emissiveMap=${DOLLAR_WALL_TEX}
-              emissiveIntensity=${0.30}
+              emissiveIntensity=${0.55}
               toneMapped=${false}
               roughness=${0.55}
             />
@@ -1147,8 +1284,22 @@ function AffordabilitySculpture() {
         </group>
       `)}
 
-      <!-- Warm light from the buried house's roof — the only sign of life -->
-      <pointLight position=${[0.2, 4.2, 0]} color="#ffd28a" intensity=${2.5} distance=${10} />
+      <!-- Shiny golden coin crowning the tower — the monument's beacon -->
+      <mesh position=${[0.2, 5.45, 0]} rotation=${[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args=${[0.72, 0.72, 0.12, 28]} />
+        <meshStandardMaterial
+          color="#d4a017"
+          emissive="#ffcf4d"
+          emissiveIntensity=${2.0}
+          metalness=${0.9}
+          roughness=${0.18}
+          toneMapped=${false}
+        />
+      </mesh>
+
+      <!-- Warm light at the coin — the only sign of life -->
+      <pointLight position=${[0.2, 5.2, 0]} color="#ffd28a" intensity=${3} distance=${12} />
+      </group>
     </group>
   `;
 }
@@ -1527,11 +1678,11 @@ const CART_BUNDLE_COLORS = ["#a04848", "#3868a0", "#487868", "#7060e0", "#a85c40
 
    Queue line extends along +x from the door so it sits parallel to
    the building's front face (between building + perimeter loop). */
-const QUEUE_CAPACITY  = 12;
+const QUEUE_CAPACITY  = 6;
 const QUEUE_SPACING   = 0.7;
-const QUEUE_X0        = 0.5;            // slot 0 offset from FOOD_BANK.x
-const QUEUE_Z         = 2.0;            // queue z relative to FOOD_BANK.z
-const DOOR_TARGET_DZ  = 1.0;            // door entry target z relative to FOOD_BANK.z
+const QUEUE_X0        = 0.5;            // slot 0 offset from FOODBANK_POS.x
+const QUEUE_Z         = 2.0;            // queue z relative to FOODBANK_POS.z
+const DOOR_TARGET_DZ  = 1.0;            // door entry target z relative to FOODBANK_POS.z
 
 function FoodBankQueue() {
   const bodyRef = useRef();
@@ -1544,8 +1695,8 @@ function FoodBankQueue() {
     const arr = [];
     for (let i = 0; i < QUEUE_CAPACITY; i++) {
       arr.push({
-        x: FOOD_BANK.x + QUEUE_X0 + i * QUEUE_SPACING,
-        z: FOOD_BANK.z + QUEUE_Z,
+        x: FOODBANK_POS.x + QUEUE_X0 + i * QUEUE_SPACING,
+        z: FOODBANK_POS.z + QUEUE_Z,
         queuePos: i,
         state: "queued",                // 'queued' | 'entering' | 'replenishing'
         heading: -Math.PI / 2,          // faces -x by default (toward door side)
@@ -1598,11 +1749,11 @@ function FoodBankQueue() {
       // Pick a target based on state
       let tx, tz;
       if (s.state === "entering") {
-        tx = FOOD_BANK.x;
-        tz = FOOD_BANK.z + DOOR_TARGET_DZ;
+        tx = FOODBANK_POS.x;
+        tz = FOODBANK_POS.z + DOOR_TARGET_DZ;
       } else {
-        tx = FOOD_BANK.x + QUEUE_X0 + s.queuePos * QUEUE_SPACING;
-        tz = FOOD_BANK.z + QUEUE_Z;
+        tx = FOODBANK_POS.x + QUEUE_X0 + s.queuePos * QUEUE_SPACING;
+        tz = FOODBANK_POS.z + QUEUE_Z;
       }
       const dx = tx - s.x;
       const dz = tz - s.z;
@@ -1620,8 +1771,8 @@ function FoodBankQueue() {
         // Front person reached door — respawn at back of queue
         s.queuePos = QUEUE_CAPACITY - 1;
         s.state = "replenishing";
-        s.x = FOOD_BANK.x + QUEUE_X0 + (QUEUE_CAPACITY + 1) * QUEUE_SPACING;
-        s.z = FOOD_BANK.z + QUEUE_Z + 1.5 + Math.random() * 1.0;
+        s.x = FOODBANK_POS.x + QUEUE_X0 + (QUEUE_CAPACITY + 1) * QUEUE_SPACING;
+        s.z = FOODBANK_POS.z + QUEUE_Z + 1.5 + Math.random() * 1.0;
         s.bodyColor = FLOCK_BODY_COLORS[Math.floor(Math.random() * FLOCK_BODY_COLORS.length)];
         s.skinColor = FLOCK_SKIN_COLORS[Math.floor(Math.random() * FLOCK_SKIN_COLORS.length)];
         colorTmp.set(s.bodyColor);
@@ -1726,10 +1877,11 @@ const TENT_PACK_COLORS_LIST = ["#3868a0", "#c84030", "#487868", "#e08020", "#706
 function City() {
   return html`
     <group>
-      <${Instances} limit=${BUILDINGS.length} castShadow receiveShadow>
+      <!-- Box walls -->
+      <${Instances} limit=${Math.max(1, BOX_BLDGS.length)} castShadow receiveShadow>
         <boxGeometry args=${[1, 1, 1]} />
         <meshStandardMaterial roughness=${0.85} />
-        ${BUILDINGS.map((b, i) => html`
+        ${BOX_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
             position=${[b.x, b.groundY + b.h / 2, b.z]}
             scale=${[b.w, b.h, b.d]}
@@ -1738,6 +1890,110 @@ function City() {
         `)}
       </${Instances}>
 
+      <!-- Cylindrical towers -->
+      <${Instances} limit=${Math.max(1, CYL_BLDGS.length)} castShadow receiveShadow>
+        <cylinderGeometry args=${[0.5, 0.5, 1, 20]} />
+        <meshStandardMaterial roughness=${0.85} />
+        ${CYL_BLDGS.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x, b.groundY + b.h / 2, b.z]}
+            scale=${[b.w, b.h, b.w]}
+            color=${b.color} />
+        `)}
+      </${Instances}>
+
+      <!-- Cylinder floor bands -->
+      <${Instances} limit=${Math.max(1, CYL_BANDS.length)}>
+        <cylinderGeometry args=${[0.5, 0.5, 1, 20]} />
+        <meshStandardMaterial roughness=${0.9} />
+        ${CYL_BANDS.map((r, i) => html`
+          <${Instance} key=${i}
+            position=${[r.x, r.y, r.z]}
+            scale=${[r.w, 0.22, r.w]}
+            color=${r.color} />
+        `)}
+      </${Instances}>
+
+      <!-- Setback second tiers on tall box buildings -->
+      <${Instances} limit=${Math.max(1, TIERED_BLDGS.length)} castShadow>
+        <boxGeometry args=${[1, 1, 1]} />
+        <meshStandardMaterial roughness=${0.85} />
+        ${TIERED_BLDGS.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x, b.groundY + b.h + b.t2.h / 2, b.z]}
+            scale=${[b.t2.w, b.t2.h, b.t2.d]}
+            color=${b.color} />
+        `)}
+      </${Instances}>
+
+      <!-- Roof caps — sit on the top tier when present -->
+      <${Instances} limit=${Math.max(1, BOX_BLDGS.length)} castShadow>
+        <boxGeometry args=${[1, 1, 1]} />
+        <meshStandardMaterial roughness=${0.9} />
+        ${BOX_BLDGS.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x, b.groundY + b.h + (b.t2 ? b.t2.h : 0) + 0.09, b.z]}
+            scale=${[(b.t2 ? b.t2.w : b.w) + 0.14, 0.18, (b.t2 ? b.t2.d : b.d) + 0.14]}
+            color=${b.roofColor} />
+        `)}
+      </${Instances}>
+
+      <!-- Cylinder roof caps -->
+      <${Instances} limit=${Math.max(1, CYL_BLDGS.length)} castShadow>
+        <cylinderGeometry args=${[0.5, 0.5, 1, 20]} />
+        <meshStandardMaterial roughness=${0.9} />
+        ${CYL_BLDGS.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x, b.groundY + b.h + 0.08, b.z]}
+            scale=${[b.w + 0.14, 0.16, b.w + 0.14]}
+            color=${b.roofColor} />
+        `)}
+      </${Instances}>
+
+      <!-- Parapet railings -->
+      <${Instances} limit=${Math.max(1, ROOF_RAILS.length)}>
+        <boxGeometry args=${[1, 0.2, 0.05]} />
+        <meshStandardMaterial color="#3c4148" roughness=${0.6} metalness=${0.4} />
+        ${ROOF_RAILS.map((r, i) => html`
+          <${Instance} key=${i}
+            position=${[r.x, r.y, r.z]}
+            rotation=${[0, r.ry, 0]}
+            scale=${[r.len, 1, 1]} />
+        `)}
+      </${Instances}>
+
+      <!-- Ground-floor band — storefront plinth in a deeper shade -->
+      <${Instances} limit=${Math.max(1, BOX_BLDGS.length)} receiveShadow>
+        <boxGeometry args=${[1, 1, 1]} />
+        <meshStandardMaterial roughness=${0.9} />
+        ${BOX_BLDGS.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x, b.groundY + 0.35, b.z]}
+            scale=${[b.w + 0.08, 0.7, b.d + 0.08]}
+            color=${b.baseColor} />
+        `)}
+      </${Instances}>
+
+      <!-- Rooftop AC units -->
+      <${Instances} limit=${Math.max(1, ROOF_UNITS.length)} castShadow>
+        <boxGeometry args=${[0.55, 0.32, 0.45]} />
+        <meshStandardMaterial color="#b8bcc2" roughness=${0.6} metalness=${0.35} />
+        ${ROOF_UNITS.map((u, i) => html`
+          <${Instance} key=${i}
+            position=${[u.x, u.y, u.z]}
+            rotation=${[0, u.ry, 0]}
+            scale=${[u.s, u.s, u.s]} />
+        `)}
+      </${Instances}>
+
+      <!-- Rooftop water tanks -->
+      <${Instances} limit=${Math.max(1, ROOF_TANKS.length)} castShadow>
+        <cylinderGeometry args=${[0.28, 0.32, 0.7, 10]} />
+        <meshStandardMaterial color="#8a7a64" roughness=${0.8} />
+        ${ROOF_TANKS.map((t, i) => html`
+          <${Instance} key=${i} position=${[t.x, t.y, t.z]} scale=${[t.s, t.s, t.s]} />
+        `)}
+      </${Instances}>
     </group>
   `;
 }
@@ -1969,6 +2225,10 @@ const TREES = [];
         const dx = x - t.x, dz = z - t.z;
         if (dx * dx + dz * dz < 12) { clear = false; break; }
       }
+      if (clear) for (const sc of SCULPT_CENTERS) {
+        const dx = x - sc.x, dz = z - sc.z;
+        if (dx * dx + dz * dz < 49) { clear = false; break; }   // gate plazas
+      }
       if (!clear) continue;
       TREES.push({
         x, z,
@@ -2112,6 +2372,29 @@ const INNER_LEN_V = LOOP_H - ROAD_LANE;
 function Roads() {
   return html`
     <group>
+      <!-- Pale city pad — the whole downtown sits on one light slab, so
+           roads read as paved urban block instead of blending into the
+           meadow (reference: Windland's platform) -->
+      <mesh position=${[0, 0.012, 0]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+        <planeGeometry args=${[(CAR_LOOP.xMax + ROAD_LANE / 2 + 1.6) * 2, (CAR_LOOP.zMax + ROAD_LANE / 2 + 1.6) * 2]} />
+        <meshStandardMaterial color="#dce1d6" roughness=${0.95} />
+      </mesh>
+
+      <!-- Light curb base under each inner street so the dark asphalt
+           pops against the grass instead of blending into the terrain -->
+      ${INNER_STREETS_H.map((z, i) => html`
+        <mesh key=${`ihb${i}`} position=${[0, 0.026, z]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+          <planeGeometry args=${[INNER_LEN_H, INNER_LANE + 1.1]} />
+          <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+        </mesh>
+      `)}
+      ${INNER_STREETS_V.map((x, i) => html`
+        <mesh key=${`ivb${i}`} position=${[x, 0.027, 0]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+          <planeGeometry args=${[INNER_LANE + 1.1, INNER_LEN_V]} />
+          <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+        </mesh>
+      `)}
+
       <!-- Inner grid streets (no cars, just pavement). Y values bumped
            apart (5mm gaps) to kill z-fighting at intersections. -->
       ${INNER_STREETS_H.map((z, i) => html`
@@ -2143,6 +2426,24 @@ function Roads() {
         <planeGeometry args=${[ROAD_LANE, LOOP_H]} />
         <meshStandardMaterial color="#3a3634" roughness=${0.95} />
       </mesh>
+      <!-- Sidewalk ring just outside the perimeter loop -->
+      <mesh position=${[0, 0.030, CAR_LOOP.zMax + ROAD_LANE / 2 + 0.55]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+        <planeGeometry args=${[LOOP_W + ROAD_LANE + 2.4, 1.1]} />
+        <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+      </mesh>
+      <mesh position=${[0, 0.030, CAR_LOOP.zMin - ROAD_LANE / 2 - 0.55]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+        <planeGeometry args=${[LOOP_W + ROAD_LANE + 2.4, 1.1]} />
+        <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+      </mesh>
+      <mesh position=${[CAR_LOOP.xMax + ROAD_LANE / 2 + 0.55, 0.030, 0]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+        <planeGeometry args=${[1.1, LOOP_H + ROAD_LANE]} />
+        <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+      </mesh>
+      <mesh position=${[CAR_LOOP.xMin - ROAD_LANE / 2 - 0.55, 0.030, 0]} rotation=${[-Math.PI/2, 0, 0]} receiveShadow>
+        <planeGeometry args=${[1.1, LOOP_H + ROAD_LANE]} />
+        <meshStandardMaterial color="#cdc7b6" roughness=${0.95} />
+      </mesh>
+
       <!-- Dashed centerlines (one instanced group per side) -->
       ${[
         ...Array.from({ length: 14 }, (_, i) => ({ kind: "h", x: CAR_LOOP.xMin + 1.8 + i * 3.6, z: CAR_LOOP.zMax })),
@@ -2184,41 +2485,42 @@ const CLOUD_PUFFS = [];
   // Each cluster spawns 12-22 tightly grouped sprite puffs so the
   // billboards merge visually into a single cumulus shape rather than
   // reading as isolated dots.
-  const SKY_CLUSTERS = 28;
+  // Fewer, LARGER clusters — each cloud is a big sprawling cumulus
+  const SKY_CLUSTERS = 24;
   for (let i = 0; i < SKY_CLUSTERS; i++) {
     const angle = Math.random() * Math.PI * 2;
     const r = Math.sqrt(Math.random()) * 160;
     const cx = Math.cos(angle) * r;
     const cy = 28 + Math.random() * 18;
     const cz = Math.sin(angle) * r;
-    const puffs = 18 + Math.floor(Math.random() * 14);   // 18-31 puffs per cloud
-    const clusterSize = 2.6 + Math.random() * 2.4;       // 2.6-5.0m disc — bigger
+    const puffs = 32 + Math.floor(Math.random() * 18);   // 32-49 puffs per cloud
+    const clusterSize = 5.5 + Math.random() * 4.5;       // 5.5-10m sprawl
     for (let j = 0; j < puffs; j++) {
       const pa = Math.random() * Math.PI * 2;
       const pd = Math.sqrt(Math.random()) * clusterSize;
       CLOUD_PUFFS.push({
         ox: cx + Math.cos(pa) * pd,
-        oy: cy + (Math.random() - 0.5) * 1.6,
+        oy: cy + (Math.random() - 0.5) * 2.2,
         oz: cz + Math.sin(pa) * pd,
-        size: 20 + Math.random() * 14,                   // larger sprites
+        size: 20 + Math.random() * 14,
       });
     }
   }
-  const CITY_CLUSTERS = 9;
+  const CITY_CLUSTERS = 7;
   for (let i = 0; i < CITY_CLUSTERS; i++) {
     const angle = Math.random() * Math.PI * 2;
     const r = Math.sqrt(Math.random()) * 22;
     const cx = Math.cos(angle) * r;
     const cy = 24 + Math.random() * 12;
     const cz = Math.sin(angle) * r;
-    const puffs = 20 + Math.floor(Math.random() * 12);
-    const clusterSize = 2.4 + Math.random() * 2.0;
+    const puffs = 34 + Math.floor(Math.random() * 16);
+    const clusterSize = 5.0 + Math.random() * 4.0;
     for (let j = 0; j < puffs; j++) {
       const pa = Math.random() * Math.PI * 2;
       const pd = Math.sqrt(Math.random()) * clusterSize;
       CLOUD_PUFFS.push({
         ox: cx + Math.cos(pa) * pd,
-        oy: cy + (Math.random() - 0.5) * 1.4,
+        oy: cy + (Math.random() - 0.5) * 2.0,
         oz: cz + Math.sin(pa) * pd,
         size: 22 + Math.random() * 13,
       });
@@ -2260,7 +2562,7 @@ function CloudLayer() {
         void main() {
           vec4 tex = texture2D(cloudTex, gl_PointCoord);
           if (tex.a < 0.02) discard;
-          gl_FragColor = vec4(1.0, 0.99, 0.96, tex.a * 0.55);
+          gl_FragColor = vec4(1.0, 0.99, 0.96, tex.a * 0.38);
         }
       `,
       transparent: true,
@@ -2287,6 +2589,383 @@ function CloudLayer() {
 
   return html`<points ref=${pointsRef} args=${[geometry, material]} />`;
 }
+
+/* =========================================================
+   Sky dome — stylized LDR gradient instead of drei's physical
+   <Sky>. The physical sky is HDR (the sun region outputs values
+   far above 1.0), which permanently trips the bloom pass and
+   gets washed milky by ACES tone mapping. A gradient dome stays
+   ≤ 1.0 everywhere: never blooms, keeps its saturated blue, and
+   matches the low-poly aesthetic. toneMapped=false so ACES
+   doesn't desaturate it; fog=false so the distance fog doesn't
+   gray it out.
+   ========================================================= */
+/* Shared registry of refs the DayCycle controller mutates per frame —
+   avoids re-rendering React for continuous time-of-day changes. */
+const CYCLE_REFS = {
+  dir: null, hemi: null, amb: null, rim: null,
+  skyMat: null, sunMesh: null, moonMesh: null,
+  litMat: null, duskMat: null, lampMat: null, controls: null, dof: null,
+};
+
+function SkyDome({ onSun }) {
+  // Gradient dome as a shader: three color uniforms blended by altitude.
+  // The DayCycle controller writes the uniforms every frame, so the sky
+  // can sweep through dawn → noon → dusk → night continuously.
+  const skyMat = useMemo(() => new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      uZenith:  { value: new THREE.Color("#2f8fe0") },
+      uMid:     { value: new THREE.Color("#6db9f0") },
+      uHorizon: { value: new THREE.Color("#c4e2f8") },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec3 vDir;
+      uniform vec3 uZenith;
+      uniform vec3 uMid;
+      uniform vec3 uHorizon;
+      void main() {
+        float h = normalize(vDir).y;
+        vec3 c = mix(uHorizon, uMid, smoothstep(-0.08, 0.30, h));
+        c = mix(c, uZenith, smoothstep(0.30, 0.85, h));
+        gl_FragColor = vec4(c, 1.0);
+      }
+    `,
+  }), []);
+  useEffect(() => { CYCLE_REFS.skyMat = skyMat; }, [skyMat]);
+
+  return html`
+    <group>
+      <mesh material=${skyMat}>
+        <sphereGeometry args=${[400, 32, 24]} />
+      </mesh>
+      <!-- Sun disc — position + tint driven by DayCycle; also feeds GodRays -->
+      <mesh
+        ref=${(m) => { CYCLE_REFS.sunMesh = m; if (m && onSun) onSun(m); }}
+        position=${[112, 288, 96]}>
+        <sphereGeometry args=${[15, 16, 16]} />
+        <meshStandardMaterial
+          color="#000000"
+          emissive="#fff2c8"
+          emissiveIntensity=${2.3}
+          toneMapped=${false}
+          fog=${false}
+        />
+      </mesh>
+      <!-- Moon disc — opposite the sun, visible at night -->
+      <mesh ref=${(m) => (CYCLE_REFS.moonMesh = m)} position=${[0, -370, 0]} visible=${false}>
+        <sphereGeometry args=${[11, 16, 16]} />
+        <meshStandardMaterial
+          color="#0a0c14"
+          emissive="#dce6ff"
+          emissiveIntensity=${1.5}
+          toneMapped=${false}
+          fog=${false}
+        />
+      </mesh>
+    </group>
+  `;
+}
+
+/* =========================================================
+   Day cycle — keyframed time-of-day. u ∈ [0,1): 0 = sunrise,
+   0.25 = noon, 0.5 = sunset, 0.75 = midnight. Modes:
+     'day'   → ease u to noon and hold
+     'dusk'  → ease u to sunset and hold
+     'cycle' → u advances continuously (full day in 90s)
+   All values are lerped between keyframes and written straight
+   into refs — zero React re-renders per frame.
+   ========================================================= */
+const DAY_LENGTH_S = 150;   // slower sun → smoother shadow sweep
+const _DC = (hex) => new THREE.Color(hex);
+const CYCLE_KEYS = [
+  { u: 0.00, zen: _DC("#46559e"), mid: _DC("#d98f9b"), hor: _DC("#ffc890"), sun: _DC("#ffb070"), sunI: 1.15, hSky: _DC("#d8a4a4"), hGnd: _DC("#6a5a48"), hI: 0.50, amb: 0.18, fog: _DC("#f4c8a6"), bg: _DC("#d98f9b"), win: 0.65, rim: 0.45 },
+  { u: 0.10, zen: _DC("#2f8fe0"), mid: _DC("#6db9f0"), hor: _DC("#d8ecf8"), sun: _DC("#ffe8b8"), sunI: 2.10, hSky: _DC("#bdd6ea"), hGnd: _DC("#88a850"), hI: 0.65, amb: 0.23, fog: _DC("#e2f0fa"), bg: _DC("#6db9f0"), win: 0.15, rim: 0.40 },
+  { u: 0.25, zen: _DC("#2f8fe0"), mid: _DC("#6db9f0"), hor: _DC("#c4e2f8"), sun: _DC("#fff4cc"), sunI: 2.50, hSky: _DC("#bdd6ea"), hGnd: _DC("#88a850"), hI: 0.70, amb: 0.25, fog: _DC("#dceefb"), bg: _DC("#6db9f0"), win: 0.00, rim: 0.40 },
+  { u: 0.40, zen: _DC("#3585d2"), mid: _DC("#7fb6e8"), hor: _DC("#e8e2c8"), sun: _DC("#ffeab8"), sunI: 2.20, hSky: _DC("#c2d2e2"), hGnd: _DC("#8aa050"), hI: 0.62, amb: 0.22, fog: _DC("#e8ecd8"), bg: _DC("#7fb6e8"), win: 0.10, rim: 0.42 },
+  { u: 0.50, zen: _DC("#3d4a8c"), mid: _DC("#8a64a4"), hor: _DC("#f0966a"), sun: _DC("#ff9a55"), sunI: 1.70, hSky: _DC("#c8909e"), hGnd: _DC("#6a5a48"), hI: 0.45, amb: 0.18, fog: _DC("#f6c391"), bg: _DC("#c98a92"), win: 1.00, rim: 0.55 },
+  { u: 0.62, zen: _DC("#1c2350"), mid: _DC("#343c70"), hor: _DC("#6a4a72"), sun: _DC("#9ab0d8"), sunI: 0.32, hSky: _DC("#41507a"), hGnd: _DC("#2c3022"), hI: 0.30, amb: 0.14, fog: _DC("#5a5c84"), bg: _DC("#343c70"), win: 1.00, rim: 0.30 },
+  { u: 0.75, zen: _DC("#0d1226"), mid: _DC("#162038"), hor: _DC("#27334e"), sun: _DC("#aac4e8"), sunI: 0.40, hSky: _DC("#2e3c58"), hGnd: _DC("#1c2418"), hI: 0.26, amb: 0.12, fog: _DC("#222b42"), bg: _DC("#162038"), win: 1.00, rim: 0.28 },
+  { u: 0.90, zen: _DC("#222b5e"), mid: _DC("#3c4078"), hor: _DC("#7a5878"), sun: _DC("#b8c0dc"), sunI: 0.36, hSky: _DC("#4a4a6a"), hGnd: _DC("#33301f"), hI: 0.32, amb: 0.15, fog: _DC("#6a6488"), bg: _DC("#3c4078"), win: 0.90, rim: 0.32 },
+];
+
+// Scratch sample — colors + scalars lerped into here every frame (no GC)
+const _CY = {
+  zen: new THREE.Color(), mid: new THREE.Color(), hor: new THREE.Color(),
+  sun: new THREE.Color(), hSky: new THREE.Color(), hGnd: new THREE.Color(),
+  fog: new THREE.Color(), bg: new THREE.Color(),
+  sunI: 0, hI: 0, amb: 0, win: 0, rim: 0,
+};
+
+function sampleCycle(u) {
+  const keys = CYCLE_KEYS;
+  for (let i = 0; i < keys.length; i++) {
+    const a = keys[i];
+    const b = keys[(i + 1) % keys.length];
+    const end = b.u > a.u ? b.u : b.u + 1;
+    const uu = u >= a.u ? u : u + 1;
+    if (uu >= a.u && uu < end) {
+      const t = (uu - a.u) / (end - a.u);
+      _CY.zen.lerpColors(a.zen, b.zen, t);
+      _CY.mid.lerpColors(a.mid, b.mid, t);
+      _CY.hor.lerpColors(a.hor, b.hor, t);
+      _CY.sun.lerpColors(a.sun, b.sun, t);
+      _CY.hSky.lerpColors(a.hSky, b.hSky, t);
+      _CY.hGnd.lerpColors(a.hGnd, b.hGnd, t);
+      _CY.fog.lerpColors(a.fog, b.fog, t);
+      _CY.bg.lerpColors(a.bg, b.bg, t);
+      _CY.sunI = a.sunI + (b.sunI - a.sunI) * t;
+      _CY.hI   = a.hI   + (b.hI   - a.hI)   * t;
+      _CY.amb  = a.amb  + (b.amb  - a.amb)  * t;
+      _CY.win  = a.win  + (b.win  - a.win)  * t;
+      _CY.rim  = a.rim  + (b.rim  - a.rim)  * t;
+      return;
+    }
+  }
+}
+
+const _WIN_DARK = new THREE.Color("#161c2a");
+const _WIN_WARM = new THREE.Color("#ffd28a");
+const _WIN_EMIT = new THREE.Color("#ff9c4a");
+const _WIN_OFF  = new THREE.Color("#000000");
+
+function DayCycle({ mode }) {
+  const { scene } = useThree();
+  const uRef = useRef(0.25);          // start at noon
+  const lastBake = useRef(0.25);
+
+  useFrame((_, dt) => {
+    const cdt = Math.min(dt, 0.1);
+    let u = uRef.current;
+    if (mode === "cycle") {
+      // Continuous day/night: daylight at full pace, night gently
+      // compressed (~2.5×) so the dark stretch stays a mood beat,
+      // not a wait. Always smooth, no pops at the wrap.
+      const nightSpeed = u > 0.5 ? 2.5 : 1;
+      u = (u + (cdt * nightSpeed) / DAY_LENGTH_S) % 1;
+    } else {
+      // Ease toward the mode's fixed time (shortest way around the clock)
+      const target = mode === "dusk" ? 0.5 : 0.25;
+      let d = target - u;
+      if (d > 0.5) d -= 1; else if (d < -0.5) d += 1;
+      if (Math.abs(d) > 0.0004) u = ((u + d * Math.min(1, cdt * 1.6)) % 1 + 1) % 1;
+    }
+    uRef.current = u;
+    sampleCycle(u);
+
+    // Sun path: u=0 east horizon → 0.25 overhead → 0.5 west horizon → night
+    const ang = u * Math.PI * 2;
+    const elev = Math.sin(ang) * (Math.PI / 3.1);
+    const az = ang + 0.35;
+    const ce = Math.cos(elev);
+    const dx = Math.cos(az) * ce;
+    const dy = Math.sin(elev);
+    const dz = Math.sin(az) * ce * 0.55;
+
+    const R = CYCLE_REFS;
+    if (R.dir) {
+      // Below the horizon the key light flips to the moon's direction
+      const day = dy > 0.04;
+      const sx = day ? dx : -dx;
+      const sy = Math.max(0.06, Math.abs(dy));
+      const sz = day ? dz : -dz;
+      R.dir.position.set(sx * 45, sy * 45, sz * 45);
+      R.dir.color.copy(_CY.sun);
+      // Fade the key light to zero through the horizon flip: the sun→moon
+      // direction swap is instantaneous, and for a frame the shadow map
+      // still holds the old direction — with the light dark during the
+      // swap, that stale-shadow frame can't flash the screen black.
+      // Ambient + hemisphere carry the scene through the dim twilight.
+      const flipFade = THREE.MathUtils.smoothstep(Math.abs(dy), 0.02, 0.12);
+      R.dir.intensity = _CY.sunI * flipFade;
+      // Shadow cadence: while cycling the map re-renders every frame —
+      // alternating-frame bakes read as flicker; constant cadence doesn't.
+      if (mode === "cycle") {
+        R.dir.shadow.needsUpdate = true;
+      } else {
+        let bd = Math.abs(u - lastBake.current);
+        if (bd > 0.5) bd = 1 - bd;
+        if (bd > 0.0025) {
+          R.dir.shadow.needsUpdate = true;
+          lastBake.current = u;
+        }
+      }
+    }
+    if (R.hemi) {
+      R.hemi.intensity = _CY.hI;
+      R.hemi.color.copy(_CY.hSky);
+      R.hemi.groundColor.copy(_CY.hGnd);
+    }
+    if (R.amb) R.amb.intensity = _CY.amb;
+    if (R.rim) R.rim.intensity = _CY.rim;
+    if (R.skyMat) {
+      R.skyMat.uniforms.uZenith.value.copy(_CY.zen);
+      R.skyMat.uniforms.uMid.value.copy(_CY.mid);
+      R.skyMat.uniforms.uHorizon.value.copy(_CY.hor);
+    }
+    if (R.sunMesh) {
+      R.sunMesh.position.set(dx * 370, dy * 370, dz * 370);
+      R.sunMesh.visible = dy > -0.05;
+      R.sunMesh.material.emissive.copy(_CY.sun);
+    }
+    if (R.moonMesh) {
+      R.moonMesh.position.set(-dx * 370, -dy * 370, -dz * 370);
+      R.moonMesh.visible = -dy > -0.05;
+    }
+    if (scene.fog) scene.fog.color.copy(_CY.fog);
+    if (scene.background && scene.background.isColor) scene.background.copy(_CY.bg);
+
+    // Windows: always-lit set brightens at night; dusk pool fades on
+    if (R.litMat) R.litMat.emissiveIntensity = 0.55 + 0.8 * _CY.win;
+    if (R.duskMat) {
+      R.duskMat.color.copy(_WIN_DARK).lerp(_WIN_WARM, _CY.win);
+      R.duskMat.emissive.copy(_WIN_OFF).lerp(_WIN_EMIT, _CY.win);
+      R.duskMat.emissiveIntensity = 1.05 * _CY.win;
+    }
+    if (R.lampMat) R.lampMat.emissiveIntensity = 0.15 + 1.8 * _CY.win;
+  });
+
+  return null;
+}
+
+/* =========================================================
+   Sculpture focus — fly the camera to a monument when the
+   SCULPTURES menu fires a c4-focus event. The camera and
+   OrbitControls target ease toward a framed view; any user
+   pointer input cancels the flight and hands control back.
+   ========================================================= */
+const FOCUS = {
+  active: false,
+  target: new THREE.Vector3(),
+  camPos: new THREE.Vector3(),
+};
+
+function focusOnSculpture(name) {
+  if (name === "overview") {
+    FOCUS.target.set(0, 1.2, 0);
+    FOCUS.camPos.set(36, 24, 46);
+    FOCUS.active = true;
+    return;
+  }
+  const views = {
+    connection:    { p: FOOD_BANK,     y: 5.8, dist: 24 },
+    affordability: { p: AFFORDABILITY, y: 5.8, dist: 24 },
+    threshold:     { p: THRESHOLD,     y: 5.8, dist: 24 },
+    transition:    { p: TRANSITION,    y: 5.8, dist: 24 },
+  };
+  const v = views[name];
+  if (!v) return;
+  const { x, z } = v.p;
+  FOCUS.target.set(x, v.y, z);
+  // Approach from outside the sculpture looking back toward the city
+  const hl = Math.max(0.001, Math.hypot(x, z));
+  const dx = x / hl, dz = z / hl;
+  FOCUS.camPos.set(
+    x + dx * v.dist * 0.78,
+    v.y + v.dist * 0.58,
+    z + dz * v.dist * 0.78
+  );
+  FOCUS.active = true;
+}
+
+/* Click handler shared by the four monuments: fly the camera there and
+   tell the page chrome to open the matching goal card. stopPropagation
+   keeps the click from also dropping a tent on the ground behind. */
+function openGoal(e, name) {
+  e.stopPropagation();
+  focusOnSculpture(name);
+  window.dispatchEvent(new CustomEvent("c4-goal", { detail: { name } }));
+}
+
+function FocusController() {
+  const { camera, gl } = useThree();
+  useEffect(() => {
+    const onFocus = (e) => focusOnSculpture(e.detail && e.detail.name);
+    const onGrab = () => { FOCUS.active = false; };
+    window.addEventListener("c4-focus", onFocus);
+    gl.domElement.addEventListener("pointerdown", onGrab);
+    return () => {
+      window.removeEventListener("c4-focus", onFocus);
+      gl.domElement.removeEventListener("pointerdown", onGrab);
+    };
+  }, [gl]);
+  useFrame((_, dt) => {
+    // Depth of field tracks whatever the orbit is looking at
+    const dofEffect = CYCLE_REFS.dof;
+    if (dofEffect && CYCLE_REFS.controls) {
+      const d = camera.position.distanceTo(CYCLE_REFS.controls.target);
+      dofEffect.cocMaterial.worldFocusDistance = d;
+      dofEffect.cocMaterial.worldFocusRange = Math.max(20, d * 0.9);
+    }
+    if (!FOCUS.active) return;
+    const controls = CYCLE_REFS.controls;
+    if (!controls) return;
+    const k = 1 - Math.exp(-3.5 * Math.min(dt, 0.1));
+    camera.position.lerp(FOCUS.camPos, k);
+    controls.target.lerp(FOCUS.target, k);
+    controls.update();
+    if (camera.position.distanceTo(FOCUS.camPos) < 0.25) FOCUS.active = false;
+  });
+  return null;
+}
+
+/* =========================================================
+   Color-grade LUT — gentle teal-orange grade generated
+   procedurally as a 32³ Data3DTexture (no .cube file needed):
+   shadows nudge toward teal, highlights toward warm orange,
+   mild S-curve contrast + ~8% saturation. Replaces the old
+   HueSaturation + BrightnessContrast passes with one lookup.
+   ========================================================= */
+const GRADE_LUT_TEX = (() => {
+  const size = 32;
+  const data = new Uint8Array(size * size * size * 4);
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  let i = 0;
+  for (let bz = 0; bz < size; bz++) {
+    for (let gy = 0; gy < size; gy++) {
+      for (let rx = 0; rx < size; rx++) {
+        let r = rx / (size - 1), g = gy / (size - 1), b = bz / (size - 1);
+        // Mild S-curve: 35% smoothstep blended with identity
+        const sc = (v) => v * v * (3 - 2 * v) * 0.35 + v * 0.65;
+        r = sc(r); g = sc(g); b = sc(b);
+        // Teal-orange split toning by luma
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        const shadow = Math.max(0, 1 - luma * 1.8);
+        const high = Math.max(0, luma * 1.5 - 0.5);
+        r += high * 0.045 - shadow * 0.025;
+        g += high * 0.015 + shadow * 0.005;
+        b += -high * 0.035 + shadow * 0.045;
+        // ~8% saturation lift
+        const l2 = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = l2 + (r - l2) * 1.08;
+        g = l2 + (g - l2) * 1.08;
+        b = l2 + (b - l2) * 1.08;
+        data[i++] = Math.round(clamp01(r) * 255);
+        data[i++] = Math.round(clamp01(g) * 255);
+        data[i++] = Math.round(clamp01(b) * 255);
+        data[i++] = 255;
+      }
+    }
+  }
+  const tex = new THREE.Data3DTexture(data, size, size, size);
+  tex.format = THREE.RGBAFormat;
+  tex.type = THREE.UnsignedByteType;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping;
+  tex.unpackAlignment = 1;
+  tex.needsUpdate = true;
+  return tex;
+})();
 
 /* =========================================================
    Pollen — drifting yellow particles. Wind nudges them in
@@ -2391,6 +3070,174 @@ function PollenLayer() {
   return html`<points ref=${ref} args=${[geometry, material]} />`;
 }
 
+/* =========================================================
+   Urban furniture — streetlights, benches, crosswalk stripes.
+   All baked instancing; lamp heads glow with the night cycle
+   via CYCLE_REFS.lampMat.
+   ========================================================= */
+const STREETLIGHTS = [];
+{
+  let flip = 1;
+  for (const sz of INNER_STREETS_H) {
+    for (let x = -21; x <= 21; x += 7) {
+      STREETLIGHTS.push({ x, z: sz + flip * (INNER_LANE / 2 + 0.85) });
+      flip = -flip;
+    }
+  }
+  for (const sx of INNER_STREETS_V) {
+    for (let z = -14; z <= 14; z += 7) {
+      STREETLIGHTS.push({ x: sx + flip * (INNER_LANE / 2 + 0.85), z });
+      flip = -flip;
+    }
+  }
+}
+
+const BENCHES = [];
+{
+  for (const p of PARKS) {
+    BENCHES.push({ x: p.x - 1.6, z: p.z + 0.6, ry: Math.PI / 2 });
+    BENCHES.push({ x: p.x + 1.2, z: p.z - 1.4, ry: -Math.PI / 6 });
+  }
+  // Plaza benches facing the center
+  BENCHES.push({ x:  3.4, z:  3.4, ry: -Math.PI * 0.75 });
+  BENCHES.push({ x: -3.4, z:  3.4, ry:  Math.PI * 0.75 });
+  BENCHES.push({ x:  3.4, z: -3.4, ry: -Math.PI * 0.25 });
+  BENCHES.push({ x: -3.4, z: -3.4, ry:  Math.PI * 0.25 });
+}
+
+const CROSSWALKS = [];
+for (const sz of INNER_STREETS_H) {
+  for (const sx of INNER_STREETS_V) {
+    for (let k = -1.5; k <= 1.5; k += 1) {
+      CROSSWALKS.push({ x: sx + k * 0.34, z: sz });
+    }
+  }
+}
+
+function UrbanFurniture() {
+  return html`
+    <group>
+      <!-- Lamp poles -->
+      <${Instances} limit=${Math.max(1, STREETLIGHTS.length)} castShadow>
+        <cylinderGeometry args=${[0.035, 0.05, 2.6, 8]} />
+        <meshStandardMaterial color="#3c4148" roughness=${0.6} metalness=${0.45} />
+        ${STREETLIGHTS.map((l, i) => html`
+          <${Instance} key=${i} position=${[l.x, 1.3, l.z]} />
+        `)}
+      </${Instances}>
+      <!-- Lamp heads — emissive driven by the night cycle -->
+      <${Instances} limit=${Math.max(1, STREETLIGHTS.length)}>
+        <sphereGeometry args=${[0.12, 10, 10]} />
+        <meshStandardMaterial
+          ref=${(m) => (CYCLE_REFS.lampMat = m)}
+          color="#fff5dc"
+          emissive="#ffb066"
+          emissiveIntensity=${0.15}
+          toneMapped=${false}
+        />
+        ${STREETLIGHTS.map((l, i) => html`
+          <${Instance} key=${i} position=${[l.x, 2.62, l.z]} />
+        `)}
+      </${Instances}>
+      <!-- Bench seats -->
+      <${Instances} limit=${Math.max(1, BENCHES.length)} castShadow>
+        <boxGeometry args=${[0.95, 0.07, 0.32]} />
+        <meshStandardMaterial color="#7a5a38" roughness=${0.85} />
+        ${BENCHES.map((b, i) => html`
+          <${Instance} key=${i} position=${[b.x, 0.45, b.z]} rotation=${[0, b.ry, 0]} />
+        `)}
+      </${Instances}>
+      <!-- Bench backs -->
+      <${Instances} limit=${Math.max(1, BENCHES.length)} castShadow>
+        <boxGeometry args=${[0.95, 0.30, 0.06]} />
+        <meshStandardMaterial color="#7a5a38" roughness=${0.85} />
+        ${BENCHES.map((b, i) => html`
+          <${Instance} key=${i}
+            position=${[b.x - Math.sin(b.ry) * 0.14, 0.66, b.z - Math.cos(b.ry) * 0.14]}
+            rotation=${[0, b.ry, 0]} />
+        `)}
+      </${Instances}>
+      <!-- Crosswalk stripes at every inner intersection -->
+      <${Instances} limit=${Math.max(1, CROSSWALKS.length)}>
+        <planeGeometry args=${[0.18, 1.45]} />
+        <meshStandardMaterial color="#e8e4da" roughness=${0.8} />
+        ${CROSSWALKS.map((c, i) => html`
+          <${Instance} key=${i} position=${[c.x, 0.052, c.z]} rotation=${[-Math.PI / 2, 0, 0]} />
+        `)}
+      </${Instances}>
+    </group>
+  `;
+}
+
+/* =========================================================
+   Residential houses — small pitched-roof homes ringing the
+   city outside the loop. Two instanced layers (bodies, roofs).
+   ========================================================= */
+const HOUSES = [];
+{
+  const HOUSE_COLORS = ["#e8d8b8", "#d8b8a0", "#c8d8e8", "#e8c8c8", "#d8e0c0", "#e0d0e8"];
+  const HOUSE_ROOFS  = ["#a05030", "#7a5a40", "#506880", "#806060"];
+  let attempts = 0;
+  while (HOUSES.length < 34 && attempts < 4000) {
+    attempts++;
+    const x = (Math.random() - 0.5) * 100;
+    const z = (Math.random() - 0.5) * 80;
+    if (Math.abs(x) < 30 && Math.abs(z) < 22) continue;   // not inside loop+sidewalk
+    if (Math.hypot(x, z) > 52) continue;                   // suburbs, not wilderness
+    let ok = true;
+    for (const t of TENT_CLUSTERS) {
+      if (Math.hypot(x - t.cx, z - t.cz) < 5) { ok = false; break; }
+    }
+    if (ok) for (const t of TURBINES) {
+      if (Math.hypot(x - t.x, z - t.z) < 6) { ok = false; break; }
+    }
+    if (ok) for (const sc of SCULPT_CENTERS) {
+      if (Math.hypot(x - sc.x, z - sc.z) < 8) { ok = false; break; }
+    }
+    if (ok) for (const h of HOUSES) {
+      if (Math.hypot(x - h.x, z - h.z) < 4.4) { ok = false; break; }
+    }
+    if (!ok) continue;
+    HOUSES.push({
+      x, z,
+      hy: hillHeight(x, z),
+      ry: Math.floor(Math.random() * 4) * (Math.PI / 2) + (Math.random() - 0.5) * 0.3,
+      s: 0.9 + Math.random() * 0.4,
+      color: HOUSE_COLORS[Math.floor(Math.random() * HOUSE_COLORS.length)],
+      roof: HOUSE_ROOFS[Math.floor(Math.random() * HOUSE_ROOFS.length)],
+    });
+  }
+}
+
+function Houses() {
+  return html`
+    <group>
+      <${Instances} limit=${Math.max(1, HOUSES.length)} castShadow receiveShadow>
+        <boxGeometry args=${[2.0, 1.5, 1.7]} />
+        <meshStandardMaterial roughness=${0.85} />
+        ${HOUSES.map((h, i) => html`
+          <${Instance} key=${i}
+            position=${[h.x, h.hy + 0.75 * h.s, h.z]}
+            rotation=${[0, h.ry, 0]}
+            scale=${[h.s, h.s, h.s]}
+            color=${h.color} />
+        `)}
+      </${Instances}>
+      <${Instances} limit=${Math.max(1, HOUSES.length)} castShadow>
+        <coneGeometry args=${[1.55, 0.95, 4]} />
+        <meshStandardMaterial roughness=${0.9} />
+        ${HOUSES.map((h, i) => html`
+          <${Instance} key=${i}
+            position=${[h.x, h.hy + (1.5 + 0.47) * h.s, h.z]}
+            rotation=${[0, h.ry + Math.PI / 4, 0]}
+            scale=${[h.s, h.s, h.s]}
+            color=${h.roof} />
+        `)}
+      </${Instances}>
+    </group>
+  `;
+}
+
 /* Cars distributed across the perimeter loop AND the inner street grid.
    Loop cars use `kind:'loop'` + `t` along the perimeter; inner-street cars
    use `kind:'grid'` + axis/perpPos/dir, wrapping at the street ends. */
@@ -2402,7 +3249,7 @@ const CARS = [];
     CARS.push({
       kind: "loop",
       t: (i / N_LOOP) * LOOP_PERIM + (Math.random() - 0.5) * 2,
-      speed: 4.0 + Math.random() * 2.0,
+      cruise: 4.0 + Math.random() * 2.0,
       color: CAR_COLORS[i % CAR_COLORS.length],
     });
   }
@@ -2415,7 +3262,7 @@ const CARS = [];
       perpPos: z,
       pos: (-INNER_LEN_H / 2) + Math.random() * INNER_LEN_H,
       dir: Math.random() < 0.5 ? 1 : -1,
-      speed: 2.6 + Math.random() * 1.4,
+      cruise: 2.6 + Math.random() * 1.4,
       color: CAR_COLORS[ci++ % CAR_COLORS.length],
     });
   }
@@ -2427,9 +3274,23 @@ const CARS = [];
       perpPos: x,
       pos: (-INNER_LEN_V / 2) + Math.random() * INNER_LEN_V,
       dir: Math.random() < 0.5 ? 1 : -1,
-      speed: 2.6 + Math.random() * 1.4,
+      cruise: 2.6 + Math.random() * 1.4,
       color: CAR_COLORS[ci++ % CAR_COLORS.length],
     });
+  }
+  // Seed world position + heading so the collision sensor works on frame 1
+  for (const car of CARS) {
+    if (car.kind === "loop") {
+      const p = perimeterPos(car.t);
+      car.x = p.x; car.z = p.z; car.heading = p.heading;
+    } else if (car.axis === "x") {
+      car.x = car.pos; car.z = car.perpPos;
+      car.heading = car.dir > 0 ? 0 : Math.PI;
+    } else {
+      car.x = car.perpPos; car.z = car.pos;
+      car.heading = car.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+    }
+    car.curSpeed = car.cruise;
   }
 }
 const CAR_COUNT = CARS.length;
@@ -2458,11 +3319,35 @@ function Cars() {
     if (!bodyRef.current || !cabinRef.current || !wheelRef.current) return;
     const cdt = Math.min(dt, 0.05);
 
+    // --- Pass 1: collision avoidance (car-following + intersection yield).
+    // Each car brakes when another sits in a short cone directly ahead of
+    // it, then eases back to cruise speed. Lower-index cars win ties so two
+    // cars meeting at an intersection can never mutually deadlock.
+    for (let i = 0; i < CAR_COUNT; i++) {
+      const car = CARS[i];
+      const fwdX = Math.cos(car.heading), fwdZ = -Math.sin(car.heading);
+      let desired = car.cruise;
+      for (let j = 0; j < CAR_COUNT; j++) {
+        if (j === i) continue;
+        const o = CARS[j];
+        const rx = o.x - car.x, rz = o.z - car.z;
+        const ahead = rx * fwdX + rz * fwdZ;
+        if (ahead < 0.3 || ahead > 4.2) continue;
+        const lat = Math.abs(rx * fwdZ - rz * fwdX);
+        if (lat > 1.4) continue;
+        if (o.curSpeed < 0.6 && j > i) continue;   // stopped + younger → I go
+        desired = 0;
+        break;
+      }
+      car.curSpeed += (desired - car.curSpeed) * Math.min(1, cdt * 5);
+    }
+
+    // --- Pass 2: advance + write matrices --------------------------------
     for (let i = 0; i < CAR_COUNT; i++) {
       const car = CARS[i];
       let x, z, heading;
       if (car.kind === "loop") {
-        car.t += car.speed * cdt;
+        car.t += car.curSpeed * cdt;
         const curr = perimeterPos(car.t);
         const look = perimeterPos(car.t + 1.0);
         const dxL = look.x - curr.x, dzL = look.z - curr.z;
@@ -2471,7 +3356,7 @@ function Cars() {
           : curr.heading;
         x = curr.x; z = curr.z;
       } else {
-        car.pos += car.speed * car.dir * cdt;
+        car.pos += car.curSpeed * car.dir * cdt;
         if (car.axis === "x") {
           if (car.pos >  INNER_LEN_H / 2) car.pos -= INNER_LEN_H;
           if (car.pos < -INNER_LEN_H / 2) car.pos += INNER_LEN_H;
@@ -2484,6 +3369,7 @@ function Cars() {
           heading = car.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
         }
       }
+      car.x = x; car.z = z; car.heading = heading;
       const cos = Math.cos(heading), sin = Math.sin(heading);
 
       // Body
@@ -2655,23 +3541,10 @@ function Flock() {
   const dogBodyRef = useRef();
   const dogHeadRef = useRef();
   const looseTentRef = useRef();
-  const footRef = useRef();
   const dummy = useMemo(() => new THREE.Object3D(), []);
   // Set of agent indices currently carrying an item — preserved across
   // frames so an agent can finish one carry before being grabbed for another.
   const assignedAgents = useMemo(() => new Set(), []);
-  // Ring buffer of footprint slots — each one fades out over its lifetime
-  // then is overwritten when an agent's step timer fires.
-  const FOOTPRINT_COUNT = 220;
-  const FOOTPRINT_LIFETIME = 9.0;
-  const footprints = useMemo(() => {
-    const arr = [];
-    for (let i = 0; i < FOOTPRINT_COUNT; i++) {
-      arr.push({ x: 0, z: 0, heading: 0, age: FOOTPRINT_LIFETIME + 1 });
-    }
-    return arr;
-  }, []);
-  const nextFootSlot = useRef(0);
 
   const agents = useMemo(() => {
     const arr = [];
@@ -2702,7 +3575,6 @@ function Flock() {
         state: 0,                                 // 0 = walking, 1 = lying
         stateTime: Math.random() * 10,            // time spent in current state
         lyingHeading: 0,                          // heading captured at lie-down
-        stepTimer: Math.random() * 0.6,           // counts down to next footprint
       });
     }
     return arr;
@@ -2873,6 +3745,41 @@ function Flock() {
       a.pos[0] += a.vel[0] * cdt;
       a.pos[2] += a.vel[2] * cdt;
 
+      // Hard collision resolution — steering keeps them out most of the
+      // time, but this guarantees nobody ever steps inside a building
+      // or onto a monument plinth.
+      const cxi = Math.round(a.pos[0] / BHASH_CELL);
+      const czi = Math.round(a.pos[2] / BHASH_CELL);
+      const nearB = BHASH.get(bhKey(cxi, czi));
+      if (nearB) {
+        for (let k = 0; k < nearB.length; k++) {
+          const b = BUILDINGS[nearB[k]];
+          const hw = b.w / 2 + 0.30, hd = b.d / 2 + 0.30;
+          const dx = a.pos[0] - b.x, dz = a.pos[2] - b.z;
+          if (Math.abs(dx) < hw && Math.abs(dz) < hd) {
+            const px = hw - Math.abs(dx), pz = hd - Math.abs(dz);
+            if (px < pz) { a.pos[0] = b.x + Math.sign(dx || 1) * hw; a.vel[0] *= -0.3; }
+            else         { a.pos[2] = b.z + Math.sign(dz || 1) * hd; a.vel[2] *= -0.3; }
+          }
+        }
+      }
+      for (let s = 0; s < SCULPT_CENTERS.length; s++) {
+        const sc = SCULPT_CENTERS[s];
+        const dx = a.pos[0] - sc.x, dz = a.pos[2] - sc.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < SCULPT_RADIUS * SCULPT_RADIUS) {
+          const d = Math.sqrt(d2) || 0.001;
+          a.pos[0] = sc.x + (dx / d) * SCULPT_RADIUS;
+          a.pos[2] = sc.z + (dz / d) * SCULPT_RADIUS;
+          // Slide along the plinth: remove the inward velocity component
+          const vn = (a.vel[0] * dx + a.vel[2] * dz) / d;
+          if (vn < 0) {
+            a.vel[0] -= (vn * dx) / d;
+            a.vel[2] -= (vn * dz) / d;
+          }
+        }
+      }
+
       const heading = Math.atan2(a.vel[0], a.vel[2]);
       a.heading = heading;          // stash for cart/dog/tent pass below
       a.bob = Math.sin(t * 6 + a.phase) * 0.04;
@@ -2886,20 +3793,6 @@ function Flock() {
       dummy.position.set(a.pos[0], 1.13 + a.bob, a.pos[2]);
       dummy.updateMatrix();
       headRef.current.setMatrixAt(i, dummy.matrix);
-
-      // Drop a footprint when the step timer fires
-      a.stepTimer -= cdt;
-      if (a.stepTimer <= 0) {
-        const speed = Math.sqrt(a.vel[0] * a.vel[0] + a.vel[2] * a.vel[2]);
-        const fp = footprints[nextFootSlot.current];
-        fp.x = a.pos[0];
-        fp.z = a.pos[2];
-        fp.heading = heading;
-        fp.age = 0;
-        nextFootSlot.current = (nextFootSlot.current + 1) % FOOTPRINT_COUNT;
-        // Faster walkers leave steps more often
-        a.stepTimer = 0.30 + 0.25 * Math.random() / Math.max(0.5, speed);
-      }
 
       // Random transition: after walking ≥ 35s, ~3% chance per second to lie down
       if (a.stateTime > 35 && Math.random() < cdt * 0.03) {
@@ -3016,22 +3909,6 @@ function Flock() {
       dogHeadRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // Footprints fade out over their lifetime via scale shrink
-    if (footRef.current) {
-      for (let fpi = 0; fpi < FOOTPRINT_COUNT; fpi++) {
-        const fp = footprints[fpi];
-        fp.age += cdt;
-        let alpha = 1 - fp.age / FOOTPRINT_LIFETIME;
-        if (alpha < 0) alpha = 0;
-        dummy.position.set(fp.x, 0.015, fp.z);
-        dummy.rotation.set(0, fp.heading, 0);
-        dummy.scale.set(alpha, alpha, alpha);
-        dummy.updateMatrix();
-        footRef.current.setMatrixAt(fpi, dummy.matrix);
-      }
-      footRef.current.instanceMatrix.needsUpdate = true;
-    }
-
     // Loose tents: when carried, sit small (backpack-sized) on the shoulder;
     // when idle, full-size tent on the ground.
     if (looseTentRef.current) {
@@ -3086,11 +3963,6 @@ function Flock() {
       <instancedMesh ref=${looseTentRef} args=${[undefined, undefined, LOOSE_TENT_POOL.length]}>
         <coneGeometry args=${[0.9, 1.1, 4]} />
         <meshStandardMaterial roughness=${0.88} />
-      </instancedMesh>
-      <!-- Footprints — thin dark patches left behind by walkers -->
-      <instancedMesh ref=${footRef} args=${[undefined, undefined, 220]}>
-        <boxGeometry args=${[0.18, 0.012, 0.30]} />
-        <meshStandardMaterial color="#3a2e22" roughness=${1.0} />
       </instancedMesh>
     </group>
   `;
@@ -3287,13 +4159,9 @@ function Ragdoll({ origin, facing, skin, cloth }) {
    ========================================================= */
 function Lights() {
   const dirRef = useRef();
-  /* Static shadow map. Two bakes after mount to catch everything, then
-     freeze autoUpdate so the shadow pass is skipped each frame. Light
-     ratios tuned so shadows read against the sunny scene:
-       - directional ~2.5 (sharp shadow contrast)
-       - hemisphere  ~0.7 (cool sky fill)
-       - ambient     ~0.25 (minimal flat fill)
-     Higher hemi/ambient washes shadows out. */
+  /* Static shadow map: two bakes after mount, then autoUpdate frozen.
+     The DayCycle controller takes over from there — it re-bakes the
+     frozen map whenever the sun has moved far enough. */
   useEffect(() => {
     const t1 = setTimeout(() => {
       if (dirRef.current) dirRef.current.shadow.needsUpdate = true;
@@ -3308,25 +4176,34 @@ function Lights() {
   }, []);
   return html`
     <group>
-      <hemisphereLight intensity=${0.7} groundColor="#88a850" color="#bdd6ea" />
-      <ambientLight intensity=${0.25} />
+      <hemisphereLight
+        ref=${(l) => (CYCLE_REFS.hemi = l)}
+        intensity=${0.7} groundColor="#88a850" color="#bdd6ea" />
+      <ambientLight ref=${(l) => (CYCLE_REFS.amb = l)} intensity=${0.25} />
       <directionalLight
-        ref=${dirRef}
+        ref=${(l) => { dirRef.current = l; CYCLE_REFS.dir = l; }}
         position=${[14, 36, 12]}
         intensity=${2.5}
         color="#fff4cc"
         castShadow
-        shadow-mapSize-width=${2048}
-        shadow-mapSize-height=${2048}
-        shadow-camera-left=${-90}
-        shadow-camera-right=${90}
-        shadow-camera-top=${90}
-        shadow-camera-bottom=${-90}
+        shadow-mapSize-width=${1024}
+        shadow-mapSize-height=${1024}
+        shadow-camera-left=${-75}
+        shadow-camera-right=${75}
+        shadow-camera-top=${75}
+        shadow-camera-bottom=${-75}
         shadow-camera-near=${0.5}
-        shadow-camera-far=${180}
+        shadow-camera-far=${150}
         shadow-bias=${-0.0008}
-        shadow-normalBias=${0.05}
+        shadow-normalBias=${0.06}
       />
+      <!-- Rim light: cool counter-light from behind the city, no shadows.
+           Edges buildings/trees against the ground so they pop. -->
+      <directionalLight
+        ref=${(l) => (CYCLE_REFS.rim = l)}
+        position=${[-26, 18, -30]}
+        intensity=${0.4}
+        color="#bcd8f5" />
     </group>
   `;
 }
@@ -3339,6 +4216,8 @@ function SceneContents({ dynTents }) {
     <${CursorProvider}>
       <${Ground} />
       <${Roads} />
+      <${UrbanFurniture} />
+      <${Houses} />
       <${City} />
       <${BuildingDetails} />
       <${Parks} />
@@ -3346,11 +4225,13 @@ function SceneContents({ dynTents }) {
       <${AffordabilitySculpture} />
       <${ThresholdSculpture} />
       <${TransitionSculpture} />
+      <${FoodBank} />
       <${Shelter} />
       <${WarmingCenter} />
       <${Tents} dynTents=${dynTents} />
       <${SleepingBags} />
       <${ShelterQueue} />
+      <${FoodBankQueue} />
       <${OutreachWorker} />
       <${Trees} />
       <${WindTurbines} />
@@ -3369,6 +4250,14 @@ function SceneContents({ dynTents }) {
 function App() {
   const [dragging, setDragging] = useState(false);
   const [dynTents, setDynTents] = useState([]);
+  const [mode, setMode] = useState("cycle");   // 'day' | 'dusk' | 'cycle' — cycling by default
+
+  // Time-of-day mode driven by the #time-toggle pill in the HTML chrome
+  useEffect(() => {
+    const onTime = (e) => setMode((e.detail && e.detail.mode) || "day");
+    window.addEventListener("c4-time", onTime);
+    return () => window.removeEventListener("c4-time", onTime);
+  }, []);
 
   const addTent = useCallback((x, z) => {
     const d = Math.sqrt(x * x + z * z);
@@ -3387,24 +4276,16 @@ function App() {
   return html`
     <${Canvas}
       shadows
-      dpr=${[1, 1.5]}
+      dpr=${[1, 1.3]}
       camera=${{ position: [36, 24, 46], fov: 55 }}
       gl=${{ antialias: true }}
     >
-      <color attach="background" args=${["#a8dcff"]} />
-      <fog attach="fog" args=${["#daeaf6", 170, 320]} />
-      <${Sky}
-        distance=${4500}
-        sunPosition=${[14, 36, 12]}
-        inclination=${0.7}
-        azimuth=${0.25}
-        turbidity=${1.4}
-        rayleigh=${1.1}
-        mieCoefficient=${0.003}
-        mieDirectionalG=${0.82}
-      />
+      <color attach="background" args=${["#6db9f0"]} />
+      <fog attach="fog" args=${["#dceefb", 55, 225]} />
+      <${SkyDome} />
 
       <${Lights} />
+      <${DayCycle} mode=${mode} />
 
       <${DragContext.Provider} value=${setDragging}>
         <${AddTentContext.Provider} value=${addTent}>
@@ -3425,6 +4306,7 @@ function App() {
       <${CloudLayer} />
 
       <${OrbitControls}
+        ref=${(c) => (CYCLE_REFS.controls = c)}
         enabled=${!dragging}
         enableZoom=${true}
         enablePan=${false}
@@ -3434,16 +4316,24 @@ function App() {
         minPolarAngle=${Math.PI / 10}
         maxPolarAngle=${Math.PI / 2.5}
       />
+      <${FocusController} />
 
-      <${EffectComposer} disableNormalPass>
+      <!-- Lean post stack: DoF (kept — it carries the look) + cheap
+           color passes. SSAO and GodRays dropped: each re-rendered the
+           scene geometry every frame and caused the stutter. -->
+      <${EffectComposer} disableNormalPass multisampling=${0}>
+        <${DepthOfField}
+          ref=${(e) => (CYCLE_REFS.dof = e)}
+          focalLength=${0.02}
+          bokehScale=${2.4}
+          height=${480} />
         <${Bloom}
-          luminanceThreshold=${1.6}
-          luminanceSmoothing=${0.08}
-          intensity=${0.35}
-          radius=${0.45}
+          luminanceThreshold=${1.1}
+          luminanceSmoothing=${0.1}
+          intensity=${0.5}
+          radius=${0.6}
           mipmapBlur />
-        <${HueSaturation} hue=${0} saturation=${0.18} />
-        <${BrightnessContrast} brightness=${0.02} contrast=${0.08} />
+        <${LUT} lut=${GRADE_LUT_TEX} />
         <${Vignette}
           eskil=${false}
           offset=${0.25}
