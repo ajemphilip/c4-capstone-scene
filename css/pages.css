@@ -1,0 +1,523 @@
+/* =========================================================
+   C4 Portfolio pages — minimal editorial style that matches
+   the scene UI's pill language. Placeholder stage.
+   ========================================================= */
+
+:root {
+  --ink: #111;
+  --paper: #f7f4ec;
+  --line: rgba(0, 0, 0, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.page-chrome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+}
+.brand {
+  font-weight: 900;
+  font-size: 30px;
+  letter-spacing: -0.05em;
+  color: #000;
+}
+.brand sup {
+  font-size: 0.3em;
+  vertical-align: super;
+  font-weight: 700;
+}
+
+.pill {
+  display: inline-block;
+  padding: 9px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: #000;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.pill:hover { background: #000; color: #fff; }
+
+main {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 24px 90px;
+}
+
+.kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgba(0, 0, 0, 0.5);
+}
+h1 {
+  font-size: clamp(34px, 6vw, 54px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 10px 0 18px;
+}
+.lede {
+  font-size: 16px;
+  color: rgba(0, 0, 0, 0.72);
+  margin: 0 0 44px;
+  max-width: 62ch;
+}
+
+.item {
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+}
+.item .num {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: rgba(0, 0, 0, 0.45);
+}
+.item h2 {
+  margin: 6px 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.item p {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.6);
+  max-width: 60ch;
+}
+.placeholder {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 14px;
+  border: 1px dashed rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.toc {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.toc a {
+  display: block;
+  padding: 14px 20px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  background: rgba(255, 255, 255, 0.6);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.toc a:hover { background: #000; color: #fff; }
+
+.page-nav {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 60px;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   Team portfolio pages
+   ========================================================= */
+
+.page-nav-pills {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* CSS-only dropdown via <details> */
+details.nav-details {
+  position: relative;
+}
+details.nav-details > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+details.nav-details > summary::-webkit-details-marker { display: none; }
+details.nav-details[open] > summary {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+details.nav-details .page-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+}
+details.nav-details .page-dropdown a {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  padding: 8px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: background 0.2s, color 0.2s;
+}
+details.nav-details .page-dropdown a:hover,
+details.nav-details .page-dropdown a.active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+/* Team badge (C1–C6 identifier) */
+.team-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  background: #000;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+
+/* Team photo block */
+.team-photo {
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px dashed rgba(0, 0, 0, 0.22);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 40px;
+  overflow: hidden;
+}
+.team-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+}
+.team-photo-placeholder {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: rgba(0, 0, 0, 0.28);
+}
+
+/* SDG goal badges */
+.sdg-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.sdg-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+.sdg-1  { background: #e5243b; }
+.sdg-3  { background: #4c9f38; }
+.sdg-10 { background: #dd1367; }
+.sdg-11 { background: #fd9d24; color: #000; }
+.sdg-16 { background: #00689d; }
+.sdg-17 { background: #19486a; }
+
+/* Team members grid */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.member {
+  padding: 12px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.6);
+  line-height: 1.3;
+}
+.member-role {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 3px;
+}
+
+/* =========================================================
+   Table of Contents grid cards
+   ========================================================= */
+.toc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+.toc-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.toc-card:hover { background: #000; color: #fff; border-color: #000; }
+.toc-num {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgba(0, 0, 0, 0.4);
+  margin-bottom: 8px;
+}
+.toc-card:hover .toc-num { color: rgba(255,255,255,0.45); }
+.toc-title { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.3; }
+.toc-desc { font-size: 11px; color: rgba(0,0,0,0.5); margin-top: 6px; line-height: 1.5; }
+.toc-card:hover .toc-desc { color: rgba(255,255,255,0.6); }
+
+.toc-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgba(0,0,0,0.38);
+  margin: 28px 0 10px;
+}
+
+/* =========================================================
+   People / faculty grid
+   ========================================================= */
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.person-card {
+  padding: 16px 18px;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.6);
+}
+.person-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
+.person-role {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(0,0,0,0.45);
+  margin-top: 4px;
+}
+.person-detail {
+  display: block;
+  font-size: 11px;
+  color: rgba(0,0,0,0.5);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   Partner zig-zag rows
+   ========================================================= */
+.partner-row {
+  display: flex;
+  gap: 36px;
+  align-items: flex-start;
+  padding: 36px 0;
+  border-top: 1px solid var(--line);
+}
+.partner-row.flip { flex-direction: row-reverse; }
+.partner-img {
+  flex: 0 0 210px;
+  aspect-ratio: 4 / 3;
+  background: rgba(0,0,0,0.04);
+  border: 1px dashed rgba(0,0,0,0.2);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+}
+.partner-img-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: rgba(0,0,0,0.28);
+  line-height: 1.6;
+}
+.partner-text { flex: 1; }
+.partner-num {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: rgba(0,0,0,0.4);
+}
+.partner-name {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin: 6px 0 12px;
+  line-height: 1.1;
+}
+.partner-desc {
+  font-size: 14px;
+  color: rgba(0,0,0,0.6);
+  line-height: 1.65;
+  margin: 0 0 16px;
+  max-width: 52ch;
+}
+.partner-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.partner-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 4px 12px;
+  border: 1px solid rgba(0,0,0,0.16);
+  border-radius: 999px;
+  color: rgba(0,0,0,0.5);
+}
+
+/* =========================================================
+   Stat blocks
+   ========================================================= */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.stat-block {
+  flex: 1 1 130px;
+  padding: 18px 20px;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.6);
+}
+.stat-value { font-size: 30px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; }
+.stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: rgba(0,0,0,0.45); margin-top: 6px; }
+
+/* =========================================================
+   Pull-quote
+   ========================================================= */
+.pull-quote {
+  margin: 16px 0 0;
+  padding: 18px 22px;
+  border-left: 3px solid #000;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: rgba(0,0,0,0.8);
+}
+.pull-quote cite {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgba(0,0,0,0.4);
+  font-style: normal;
+  margin-top: 10px;
+}
+
+/* =========================================================
+   Start / Stop / Continue
+   ========================================================= */
+.ssc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.ssc-col {
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.14);
+  background: rgba(255,255,255,0.6);
+}
+.ssc-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  margin-bottom: 12px;
+  display: block;
+}
+.ssc-col.start .ssc-label { color: #4c9f38; }
+.ssc-col.stop  .ssc-label { color: #e5243b; }
+.ssc-col.cont  .ssc-label { color: #00689d; }
+.ssc-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.ssc-list li { font-size: 12px; color: rgba(0,0,0,0.65); line-height: 1.5; padding-left: 12px; position: relative; }
+.ssc-list li::before { content: "–"; position: absolute; left: 0; color: rgba(0,0,0,0.3); }
+
+/* =========================================================
+   Responsive overrides
+   ========================================================= */
+@media (max-width: 640px) {
+  .page-nav-pills { gap: 6px; }
+  details.nav-details .page-dropdown { min-width: 220px; }
+  .team-grid { grid-template-columns: 1fr 1fr; }
+  .toc-grid { grid-template-columns: 1fr; }
+  .people-grid { grid-template-columns: 1fr 1fr; }
+  .partner-row,
+  .partner-row.flip { flex-direction: column; }
+  .partner-img { flex: none; width: 100%; aspect-ratio: 16 / 7; }
+  .ssc-grid { grid-template-columns: 1fr; }
+  .stat-block { flex: 1 1 110px; }
+}
