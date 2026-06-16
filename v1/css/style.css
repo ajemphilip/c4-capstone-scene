@@ -70,26 +70,6 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   flex-wrap: wrap;
 }
 
-.chrome-links {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 36ch;
-}
-.chrome-links p {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: rgba(0, 0, 0, 0.62);
-}
-.chrome-links strong {
-  color: #000;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.chrome-links a strong { text-decoration: underline; text-underline-offset: 3px; }
-.chrome-links a:hover strong { color: rgba(0, 0, 0, 0.6); }
-
 .sculpt-list.left { align-items: flex-start; }
 .chrome-right {
   display: flex;

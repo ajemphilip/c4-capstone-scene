@@ -20,8 +20,6 @@ import {
 } from "@react-three/cannon";
 import { EffectComposer, Bloom, Vignette, LUT, DepthOfField } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { FontLoader } from "three/addons/loaders/FontLoader.js";
-import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
 import htm from "htm";
 
 console.log("[C4] R3F app booting — pmndrs ragdoll pattern");
@@ -313,16 +311,8 @@ const TRANSITION    = { x: 20.3,  z:  0    };  // East edge  → TransitionSculp
 
 const SCULPT_SCALE = 1.6;
 
-/* The three themed statues arranged as a triangle inside the city so
-   each reads clearly from the default (south-east) camera — none hides
-   behind another. About C4 sits back-center; Teams + Partners flank the
-   front corners. */
-const ABOUT_POS    = { x: 0,   z: -3 };   // center (pulled forward)
-const TEAMS_POS    = { x: -16, z: 6 };    // front-left
-const PARTNERS_POS = { x: 16,  z: 6 };    // front-right
-
-/* Hard-collision data for the flock: statue centers + keep-out radius. */
-const SCULPT_CENTERS = [ABOUT_POS, TEAMS_POS, PARTNERS_POS];
+/* Hard-collision data for the flock: monument centers + keep-out radius. */
+const SCULPT_CENTERS = [FOOD_BANK, THRESHOLD, AFFORDABILITY, TRANSITION];
 const SCULPT_RADIUS = 5.4;   // plinth (2.8 × 1.6) + walking margin
 
 /* Clear every grid cell whose center falls inside a monument plaza or a
@@ -579,366 +569,6 @@ function _signTexture(label, color) {
 const FOODBANK_SIGN_TEX = _signTexture("FOODBANK", "#e23030");
 const SHELTER_SIGN_TEX  = _signTexture("SHELTER",  "#2a5878");
 
-/* =========================================================
-   3D sign-buttons in the suburbs — physical, clickable signs
-   that navigate to the team page and the portfolio. Placed in
-   the SE quadrant so the default camera sees them head-on.
-   ========================================================= */
-/* High-res variant for the billboard buttons — 2048×512 canvas with the
-   label auto-fit, so the text stays sharp at billboard scale. */
-function _bigSignTexture(label, color) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2048;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  let size = 380;
-  do {
-    ctx.font = `900 ${size}px Poppins, Arial Black, sans-serif`;
-    size -= 10;
-  } while (ctx.measureText(label).width > 1860 && size > 80);
-  ctx.fillStyle = color;
-  ctx.fillText(label, canvas.width / 2, canvas.height / 2 + 14);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 8;
-  return tex;
-}
-const TEAM_SIGN_TEX      = _bigSignTexture("TEAM",      "#1c1c1c");
-const PORTFOLIO_SIGN_TEX = _bigSignTexture("PORTFOLIO", "#1c1c1c");
-
-const SIGN_BUTTONS = [
-  { x: 44, z: 28, tex: TEAM_SIGN_TEX,      href: "pages/01-title.html",    accent: "#5ec5e8" },
-  { x: 26, z: 46, tex: PORTFOLIO_SIGN_TEX, href: "pages/02-contents.html", accent: "#88d4a0" },
-];
-
-function SignButton({ btn }) {
-  // Face away from the city center — straight toward the default camera
-  const ry = Math.atan2(btn.x, btn.z);
-  const baseY = hillHeight(btn.x, btn.z);
-  const gref = useRef();
-  const go = (e) => {
-    e.stopPropagation();
-    window.location.href = btn.href;
-  };
-  const over = (e) => {
-    e.stopPropagation();
-    document.body.style.cursor = "pointer";
-    if (gref.current) gref.current.scale.setScalar(1.07);
-  };
-  const out = () => {
-    document.body.style.cursor = "";
-    if (gref.current) gref.current.scale.setScalar(1);
-  };
-  return html`
-    <group ref=${gref} position=${[btn.x, baseY, btn.z]} rotation=${[0, ry, 0]}
-      onClick=${go} onPointerOver=${over} onPointerOut=${out}>
-      <!-- posts -->
-      ${[-7.0, 7.0].map((px, i) => html`
-        <mesh key=${i} position=${[px, 3.2, 0]} castShadow>
-          <cylinderGeometry args=${[0.30, 0.38, 6.4, 10]} />
-          <meshStandardMaterial color="#4a4540" roughness=${0.8} />
-        </mesh>
-      `)}
-      <!-- accent backing slab -->
-      <mesh position=${[0, 9.2, -0.30]} castShadow>
-        <boxGeometry args=${[19.0, 6.4, 0.6]} />
-        <meshStandardMaterial color=${btn.accent} roughness=${0.6} />
-      </mesh>
-      <!-- label face — slightly emissive so it reads at night -->
-      <mesh position=${[0, 9.2, 0.02]}>
-        <planeGeometry args=${[18.0, 5.4]} />
-        <meshStandardMaterial
-          map=${btn.tex}
-          emissive="#ffffff"
-          emissiveMap=${btn.tex}
-          emissiveIntensity=${0.3}
-          toneMapped=${false}
-          roughness=${0.5}
-        />
-      </mesh>
-    </group>
-  `;
-}
-
-function SignButtons() {
-  return html`
-    <group>
-      ${SIGN_BUTTONS.map((b, i) => html`<${SignButton} key=${i} btn=${b} />`)}
-    </group>
-  `;
-}
-
-/* =========================================================
-   C4 Statue — the fifth clickable monument, at the plaza
-   center: the C4 wordmark as extruded 3D letters on the
-   standard plinth, with an "ABOUT C4" text band below.
-   Click → About card (team, about, partners).
-   ========================================================= */
-let _c4FontPromise = null;
-function _getC4Font() {
-  if (!_c4FontPromise) {
-    _c4FontPromise = new FontLoader().loadAsync(
-      "https://unpkg.com/three@0.160.0/examples/fonts/optimer_bold.typeface.json"
-    );
-  }
-  return _c4FontPromise;
-}
-
-let _c4GeoCache = null;
-function C4Letters() {
-  const [geo, setGeo] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    _getC4Font()
-      .then((font) => {
-        if (!alive) return;
-        if (!_c4GeoCache) {
-          const g = new TextGeometry("C4", {
-            font,
-            size: 3.2,
-            height: 0.75,
-            curveSegments: 8,
-            bevelEnabled: true,
-            bevelThickness: 0.06,
-            bevelSize: 0.05,
-            bevelSegments: 2,
-          });
-          g.computeBoundingBox();
-          const bb = g.boundingBox;
-          g.translate(-(bb.min.x + bb.max.x) / 2, 0, -(bb.min.z + bb.max.z) / 2);
-          _c4GeoCache = g;
-        }
-        setGeo(_c4GeoCache);
-      })
-      .catch((err) => console.error("[C4] statue font failed to load", err));
-    return () => { alive = false; };
-  }, []);
-  if (!geo) return null;
-  return html`
-    <mesh geometry=${geo} position=${[0, 0.66, 0]} castShadow>
-      <meshStandardMaterial
-        color="#22262c"
-        metalness=${0.35}
-        roughness=${0.35}
-        emissive="#ffb066"
-        emissiveIntensity=${0.12}
-        toneMapped=${false}
-      />
-    </mesh>
-  `;
-}
-
-/* Park-sign band texture — label repeated twice around the plinth drum
-   so it reads from any side while the statue rotates. */
-function _statueBandTex(label) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2048;
-  canvas.height = 128;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#f6efe0";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#d8b98a";
-  ctx.fillRect(0, 8, canvas.width, 4);
-  ctx.fillRect(0, canvas.height - 12, canvas.width, 4);
-  ctx.font = "700 60px Poppins, Verdana, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#6a4a28";
-  ctx.fillText(label, 512, 68);
-  ctx.fillText(label, 1536, 68);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 8;
-  tex.wrapS = THREE.RepeatWrapping;
-  return tex;
-}
-const ABOUT_BAND_TEX    = _statueBandTex("ABOUT C4");
-const TEAMS_BAND_TEX    = _statueBandTex("TEAMS");
-const PARTNERS_BAND_TEX = _statueBandTex("PARTNERS");
-
-/* Ring of small shiny gems orbiting a statue's heart — chrome + gold
-   accents that sparkle as the monument turns. Counter-rotates a touch
-   so it shimmers against the slow base spin. */
-function OrbitGems({ y = 3.4, radius = 1.7, count = 8, tilt = 0.35, accent = "#ffcf4d" }) {
-  const ref = useRef();
-  useFrame((state) => {
-    if (ref.current) ref.current.rotation.y = state.clock.elapsedTime * 0.6;
-  });
-  const gems = useMemo(() => {
-    const arr = [];
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2;
-      arr.push({
-        x: Math.cos(a) * radius,
-        z: Math.sin(a) * radius,
-        gold: i % 2 === 0,
-        s: 0.16 + (i % 3) * 0.03,
-      });
-    }
-    return arr;
-  }, [count, radius]);
-  return html`
-    <group ref=${ref} position=${[0, y, 0]} rotation=${[tilt, 0, 0]}>
-      ${gems.map((g, i) => html`
-        <mesh key=${i} position=${[g.x, 0, g.z]} castShadow>
-          <octahedronGeometry args=${[g.s, 0]} />
-          <meshStandardMaterial
-            color=${g.gold ? "#d4a017" : "#dfe6ec"}
-            emissive=${g.gold ? accent : "#bfe0ff"}
-            emissiveIntensity=${0.5}
-            metalness=${0.95}
-            roughness=${0.12}
-            toneMapped=${false}
-          />
-        </mesh>
-      `)}
-    </group>
-  `;
-}
-
-/* Shared plinth (two-tier drum) + labelled band for the themed statues. */
-function StatuePlinth({ bandTex }) {
-  return html`
-    <group>
-      <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
-        <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
-        <meshStandardMaterial color="#2a2a2a" roughness=${0.7} metalness=${0.4} />
-      </mesh>
-      <mesh position=${[0, 0.42, 0]} castShadow receiveShadow>
-        <cylinderGeometry args=${[2.2, 2.35, 0.24, 32]} />
-        <meshStandardMaterial color="#3a3a3a" roughness=${0.6} metalness=${0.4} />
-      </mesh>
-      <mesh position=${[0, 0.78, 0]}>
-        <cylinderGeometry args=${[2.52, 2.52, 0.46, 48, 1, true]} />
-        <meshStandardMaterial
-          map=${bandTex}
-          emissive="#ffffff"
-          emissiveMap=${bandTex}
-          emissiveIntensity=${0.18}
-          side=${THREE.DoubleSide}
-          toneMapped=${false}
-          roughness=${0.6}
-        />
-      </mesh>
-    </group>
-  `;
-}
-
-function C4Statue() {
-  const groupRef = useRef();
-  useFrame((_, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
-  });
-  return html`
-    <group ref=${groupRef} position=${[ABOUT_POS.x, 0, ABOUT_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "c4")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${ABOUT_BAND_TEX} />
-      <!-- chrome pedestal sphere the letters sit on -->
-      <mesh position=${[0, 0.66, 0]} castShadow>
-        <icosahedronGeometry args=${[0.55, 1]} />
-        <meshStandardMaterial color="#cfd6dc" metalness=${0.95} roughness=${0.1}
-          emissive="#aac4ff" emissiveIntensity=${0.22} toneMapped=${false} />
-      </mesh>
-      <${C4Letters} />
-      <${OrbitGems} y=${4.2} radius=${2.0} count=${10} accent="#ffcf4d" />
-      <${OrbitGems} y=${3.0} radius=${1.4} count=${6} tilt=${-0.45} accent="#aac4ff" />
-    </group>
-  `;
-}
-
-/* Teams statue — a ring of figures (a team) standing together. */
-function TeamsStatue() {
-  const groupRef = useRef();
-  useFrame((_, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
-  });
-  const figs = useMemo(() => {
-    const cols = ["#e84050", "#2860c8", "#e8c020", "#40a040", "#c860c8", "#e08018"];
-    const arr = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      arr.push({ x: Math.cos(a) * 1.05, z: Math.sin(a) * 1.05, ry: a + Math.PI, c: cols[i] });
-    }
-    return arr;
-  }, []);
-  return html`
-    <group ref=${groupRef} position=${[TEAMS_POS.x, 0, TEAMS_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "teams")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${TEAMS_BAND_TEX} />
-      <!-- shared golden core the team gathers around -->
-      <mesh position=${[0, 1.4, 0]}>
-        <icosahedronGeometry args=${[0.5, 1]} />
-        <meshStandardMaterial color="#f0c040" emissive="#ffcf4d"
-          emissiveIntensity=${1.4} metalness=${0.9} roughness=${0.15} toneMapped=${false} />
-      </mesh>
-      <pointLight position=${[0, 1.4, 0]} color="#ffd28a" intensity=${1.6} distance=${5} />
-      ${figs.map((f, i) => html`
-        <group key=${i} position=${[f.x, 0.54, f.z]} rotation=${[0, f.ry, 0]}>
-          <mesh position=${[0, 0.6, 0]} castShadow>
-            <cylinderGeometry args=${[0.22, 0.26, 1.1, 14]} />
-            <meshStandardMaterial color=${f.c} roughness=${0.6} metalness=${0.2} />
-          </mesh>
-          <mesh position=${[0, 1.36, 0]} castShadow>
-            <sphereGeometry args=${[0.21, 16, 16]} />
-            <meshStandardMaterial color="#d4a373" roughness=${0.7} />
-          </mesh>
-          <!-- chrome shoulder band -->
-          <mesh position=${[0, 1.0, 0]}>
-            <torusGeometry args=${[0.26, 0.04, 8, 20]} />
-            <meshStandardMaterial color="#dfe6ec" metalness=${0.95} roughness=${0.12}
-              emissive="#bfe0ff" emissiveIntensity=${0.3} toneMapped=${false} />
-          </mesh>
-        </group>
-      `)}
-      <${OrbitGems} y=${2.6} radius=${1.9} count=${10} accent="#ffcf4d" />
-    </group>
-  `;
-}
-
-/* Partners statue — two interlocking rings (a union/handshake symbol). */
-function PartnersStatue() {
-  const groupRef = useRef();
-  useFrame((_, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
-  });
-  return html`
-    <group ref=${groupRef} position=${[PARTNERS_POS.x, 0, PARTNERS_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "partners")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${PARTNERS_BAND_TEX} />
-      <!-- chrome support post -->
-      <mesh position=${[0, 1.7, 0]} castShadow>
-        <cylinderGeometry args=${[0.13, 0.18, 2.4, 12]} />
-        <meshStandardMaterial color="#cfd6dc" roughness=${0.18} metalness=${0.92}
-          emissive="#aac4ff" emissiveIntensity=${0.12} toneMapped=${false} />
-      </mesh>
-      <!-- two interlocking polished rings — chrome + gold -->
-      <mesh position=${[-0.6, 3.2, 0]} castShadow>
-        <torusGeometry args=${[1.1, 0.22, 24, 60]} />
-        <meshStandardMaterial color="#dfe6ec" metalness=${0.97} roughness=${0.08}
-          emissive="#bfe0ff" emissiveIntensity=${0.28} toneMapped=${false} />
-      </mesh>
-      <mesh position=${[0.6, 3.2, 0]} rotation=${[0, Math.PI / 2, 0]} castShadow>
-        <torusGeometry args=${[1.1, 0.22, 24, 60]} />
-        <meshStandardMaterial color="#e8b84d" metalness=${0.97} roughness=${0.08}
-          emissive="#ffcf4d" emissiveIntensity=${0.3} toneMapped=${false} />
-      </mesh>
-      <!-- glowing junction where the rings meet -->
-      <mesh position=${[0, 3.2, 0]}>
-        <sphereGeometry args=${[0.3, 20, 20]} />
-        <meshStandardMaterial color="#fff5dc" emissive="#ffd28a"
-          emissiveIntensity=${2.2} toneMapped=${false} />
-      </mesh>
-      <pointLight position=${[0, 3.2, 0]} color="#ffd9a0" intensity=${1.8} distance=${6} />
-      <${OrbitGems} y=${3.2} radius=${2.0} count=${12} tilt=${0.5} accent="#ffcf4d" />
-    </group>
-  `;
-}
-
 
 /* Tileable "wall of money" texture: dark green base with gold $ glyphs. */
 const DOLLAR_WALL_TEX = (() => {
@@ -1147,7 +777,6 @@ function ConnectionSculpture() {
   return html`
     <group ref=${groupRef} position=${[FOOD_BANK.x, 0, FOOD_BANK.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "connection")}>
-      <${GoalArrow} />
       <!-- Plinth — wide outer ring -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.5, 2.7, 0.3, 32]} />
@@ -1268,7 +897,6 @@ function TransitionSculpture() {
   return html`
     <group ref=${groupRef} position=${[TRANSITION.x, 0, TRANSITION.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "transition")}>
-      <${GoalArrow} />
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -1393,7 +1021,6 @@ function ThresholdSculpture() {
   return html`
     <group ref=${groupRef} position=${[THRESHOLD.x, 0, THRESHOLD.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "threshold")}>
-      <${GoalArrow} />
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -1545,7 +1172,6 @@ function AffordabilitySculpture() {
   return html`
     <group ref=${groupRef} position=${[AFFORDABILITY.x, 0, AFFORDABILITY.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "affordability")}>
-      <${GoalArrow} />
       <!-- Plinth — same two-tier dimensions as the other monuments -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -2603,10 +2229,6 @@ const TREES = [];
         const dx = x - sc.x, dz = z - sc.z;
         if (dx * dx + dz * dz < 49) { clear = false; break; }   // gate plazas
       }
-      if (clear) for (const sb of SIGN_BUTTONS) {
-        const dx = x - sb.x, dz = z - sb.z;
-        if (dx * dx + dz * dz < 196) { clear = false; break; }   // sign billboards
-      }
       if (!clear) continue;
       TREES.push({
         x, z,
@@ -3234,30 +2856,11 @@ function focusOnSculpture(name) {
     FOCUS.active = true;
     return;
   }
-  if (name === "c4") {
-    FOCUS.target.set(ABOUT_POS.x, 4.0, ABOUT_POS.z);
-    FOCUS.camPos.set(ABOUT_POS.x + 13, 11, ABOUT_POS.z + 17);
-    FOCUS.active = true;
-    return;
-  }
-  if (name === "back") {
-    // Gentle retreat: keep the current viewing direction, just pull the
-    // camera back to a comfortable roaming distance and ease the orbit
-    // target partway toward the city center — then free roam resumes.
-    const controls = CYCLE_REFS.controls;
-    if (!controls) return;
-    const cam = controls.object;
-    const dir = cam.position.clone().sub(controls.target).normalize();
-    const dist = cam.position.distanceTo(controls.target);
-    const newDist = Math.min(60, Math.max(dist * 2.1, 38));
-    FOCUS.target.copy(controls.target).lerp(new THREE.Vector3(0, 1.2, 0), 0.35);
-    FOCUS.camPos.copy(FOCUS.target).addScaledVector(dir, newDist);
-    FOCUS.active = true;
-    return;
-  }
   const views = {
-    teams:    { p: TEAMS_POS,    y: 3.6, dist: 20 },
-    partners: { p: PARTNERS_POS, y: 3.6, dist: 20 },
+    connection:    { p: FOOD_BANK,     y: 5.8, dist: 24 },
+    affordability: { p: AFFORDABILITY, y: 5.8, dist: 24 },
+    threshold:     { p: THRESHOLD,     y: 5.8, dist: 24 },
+    transition:    { p: TRANSITION,    y: 5.8, dist: 24 },
   };
   const v = views[name];
   if (!v) return;
@@ -3272,34 +2875,6 @@ function focusOnSculpture(name) {
     z + dz * v.dist * 0.78
   );
   FOCUS.active = true;
-}
-
-/* Bouncing "click me" arrow floating above each monument. Lives inside
-   the sculpture's root group, so it inherits position, the monument
-   scale, and the group's onClick — clicking the arrow opens the goal. */
-function GoalArrow() {
-  const ref = useRef();
-  useFrame((state) => {
-    if (ref.current) {
-      ref.current.position.y = 6.9 + Math.sin(state.clock.elapsedTime * 2.4) * 0.4;
-    }
-  });
-  return html`
-    <group ref=${ref} position=${[0, 6.9, 0]}>
-      <!-- shaft -->
-      <mesh position=${[0, 0.85, 0]}>
-        <cylinderGeometry args=${[0.17, 0.17, 1.0, 10]} />
-        <meshStandardMaterial color="#ff8c42" emissive="#ff8c42"
-          emissiveIntensity=${1.6} toneMapped=${false} roughness=${0.4} />
-      </mesh>
-      <!-- head, pointing down at the monument -->
-      <mesh rotation=${[Math.PI, 0, 0]}>
-        <coneGeometry args=${[0.60, 0.95, 12]} />
-        <meshStandardMaterial color="#ff8c42" emissive="#ff8c42"
-          emissiveIntensity=${1.6} toneMapped=${false} roughness=${0.4} />
-      </mesh>
-    </group>
-  `;
 }
 
 /* Click handler shared by the four monuments: fly the camera there and
@@ -3618,9 +3193,6 @@ const HOUSES = [];
     }
     if (ok) for (const sc of SCULPT_CENTERS) {
       if (Math.hypot(x - sc.x, z - sc.z) < 8) { ok = false; break; }
-    }
-    if (ok) for (const sb of SIGN_BUTTONS) {
-      if (Math.hypot(x - sb.x, z - sb.z) < 14) { ok = false; break; }
     }
     if (ok) for (const h of HOUSES) {
       if (Math.hypot(x - h.x, z - h.z) < 4.4) { ok = false; break; }
@@ -4649,9 +4221,10 @@ function SceneContents({ dynTents }) {
       <${City} />
       <${BuildingDetails} />
       <${Parks} />
-      <${C4Statue} />
-      <${TeamsStatue} />
-      <${PartnersStatue} />
+      <${ConnectionSculpture} />
+      <${AffordabilitySculpture} />
+      <${ThresholdSculpture} />
+      <${TransitionSculpture} />
       <${FoodBank} />
       <${Shelter} />
       <${WarmingCenter} />

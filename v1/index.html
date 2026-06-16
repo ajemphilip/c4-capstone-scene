@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=8" />
+  <link rel="stylesheet" href="css/style.css?v=7" />
 
   <script type="importmap">
   {
@@ -40,25 +40,48 @@
   <!-- R3F mounts here, full-bleed -->
   <div id="root"></div>
 
-  <!-- V2 chrome: no buttons — the arrows over the monuments are the UI -->
+  <!-- Minimal chrome over the scene -->
   <header class="chrome">
+    <!-- LEFT: project identity — logo, tagline, about & portfolio -->
     <div class="chrome-left">
       <a class="brand" href="#">C4<sup>®</sup></a>
       <p class="chrome-tag">
         A living city about homelessness —<br />
-        one neighbourhood, told in motion.
+        four goals, one neighbourhood.
       </p>
-      <div class="chrome-links">
-        <p>Three monuments stand in the city — click a glowing arrow to explore one:</p>
-        <p><strong>About C4</strong> · <strong>Teams</strong> · <strong>Partners</strong></p>
-        <p><a href="pages/02-contents.html"><strong>Portfolio</strong></a> — the full capstone write-up.</p>
+      <div class="chrome-pills">
+        <a class="pill" id="about-toggle">ABOUT C4</a>
       </div>
     </div>
+
+    <!-- RIGHT: the goals + team -->
     <div class="chrome-right">
+      <a class="pill" id="time-toggle" hidden>DUSK</a>
       <p class="chrome-tag right">
-        Click a glowing arrow<br />
-        to explore a monument.
+        Four monuments, four goals.<br />
+        Click one in the city — or pick below.
       </p>
+      <div class="chrome-pills">
+        <a class="pill" id="menu-toggle">GOALS</a>
+        <a class="pill" id="portfolio-toggle">TEAM</a>
+      </div>
+      <div class="sculpt-list" id="menu-list" hidden>
+        <a data-action="goal" data-goal="connection">COMMUNITY CONNECTION</a>
+        <a data-action="goal" data-goal="affordability">HOUSING AFFORDABILITY</a>
+        <a data-action="goal" data-goal="threshold">ACCESS TO RESOURCES</a>
+        <a data-action="goal" data-goal="transition">TRANSITION TO INDEPENDENCE</a>
+        <a data-action="overview">OVERVIEW</a>
+      </div>
+      <div class="sculpt-list" id="portfolio-list" hidden>
+        <a href="pages/01-title.html">01 · TITLE PAGE</a>
+        <a href="pages/02-contents.html">02 · TABLE OF CONTENTS</a>
+        <a href="pages/03-introduction.html">03 · INTRODUCTION</a>
+        <a href="pages/04-challenge.html">04 · CHALLENGE & THEMES</a>
+        <a href="pages/05-synthesis.html">05 · CROSS-PROJECT SYNTHESIS</a>
+        <a href="pages/06-outcomes.html">06 · OUTCOMES & INSIGHTS</a>
+        <a href="pages/07-reflections.html">07 · JOURNEY REFLECTIONS</a>
+        <a href="pages/08-legacy.html">08 · LEGACY & FUTURE</a>
+      </div>
     </div>
   </header>
 
@@ -75,8 +98,23 @@
   </aside>
 
   <script>
-    // V2: chrome buttons removed — monuments (and their arrows) are the
-    // only navigation. Clicking one flies the camera + opens its card.
+    // Time-of-day pill: DAY → DUSK → CYCLE → DAY …
+    // Label always shows the NEXT mode you'll switch to.
+    (() => {
+      const order = ["day", "dusk", "cycle"];
+      const label = { day: "DAY", dusk: "DUSK", cycle: "CYCLE" };
+      let idx = 2; // current mode — starts at 'cycle' to match the app default
+      const el = document.getElementById("time-toggle");
+      const next = () => order[(idx + 1) % order.length];
+      el.textContent = label[next()];
+      el.addEventListener("click", () => {
+        idx = (idx + 1) % order.length;
+        window.dispatchEvent(new CustomEvent("c4-time", { detail: { mode: order[idx] } }));
+        el.textContent = label[next()];
+      });
+    })();
+
+    // Goals menu — fly the camera to the monument AND open its goal card
     (() => {
       const GOALS = {
         connection: {
@@ -103,8 +141,6 @@
       const moreBtn = document.getElementById("goal-more");
       document.getElementById("goal-close").addEventListener("click", () => {
         panel.hidden = true;
-        // Pull the camera back a bit and hand control back to free roam
-        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "back" } }));
       });
 
       function showGoalCard(name) {
@@ -119,62 +155,67 @@
         panel.hidden = false;
       }
 
-      const teamBtn = document.getElementById("goal-team");
-
       function showAboutCard() {
         kicker.textContent = "ABOUT";
         title.textContent = "C4 Capstone";
         desc.textContent =
           "C4 is a student capstone exploring homelessness through a living miniature city. " +
-          "Four monuments inside the city mark our goals — built by our teams together with " +
-          "faculty and community partners.";
-        teamBtn.textContent = "MEET THE TEAM";
-        teamBtn.href = "pages/01-title.html";
-        moreBtn.textContent = "PORTFOLIO";
-        moreBtn.href = "pages/02-contents.html";
-        moreBtn.removeAttribute("target");
+          "Four rotating monuments mark our goals — community connection, housing affordability, " +
+          "access to resources, and the transition to independence — while the city around them " +
+          "models the everyday life those goals belong to.";
+        moreBtn.textContent = "VIEW ON GITHUB";
+        moreBtn.href = "https://github.com/ajemphilip/c4-capstone-scene";
+        moreBtn.target = "_blank";
         panel.hidden = false;
       }
 
-      function showTeamsCard() {
-        kicker.textContent = "TEAMS";
-        title.textContent = "Our Teams";
-        desc.textContent =
-          "The management team and the launchpad teams who built C4 — collaborators across " +
-          "disciplines, working with faculty and program mentors to bring the project to life.";
-        teamBtn.textContent = "MEET THE TEAM";
-        teamBtn.href = "pages/01-title.html";
-        moreBtn.textContent = "INTRODUCTION";
-        moreBtn.href = "pages/03-introduction.html";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      function showPartnersCard() {
-        kicker.textContent = "PARTNERS";
-        title.textContent = "Partners & Organizations";
-        desc.textContent =
-          "The organizations and community partners who supported the work — the people and " +
-          "groups whose collaboration made the project possible.";
-        teamBtn.textContent = "PARTNER ORGS";
-        teamBtn.href = "#";
-        moreBtn.textContent = "PORTFOLIO";
-        moreBtn.href = "pages/02-contents.html";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      // Clicking a statue (or its arrow) in the 3D scene opens its card
+      // Clicking a monument in the 3D scene opens its goal card
       // (the scene dispatches c4-goal and flies the camera itself)
       window.addEventListener("c4-goal", (e) => {
-        const name = e.detail && e.detail.name;
-        if (name === "teams") showTeamsCard();
-        else if (name === "partners") showPartnersCard();
-        else showAboutCard();   // "c4"
+        showGoalCard(e.detail && e.detail.name);
+      });
+
+      // MENU pill — dropdown with About, the four goals, and Overview
+      const menuToggle = document.getElementById("menu-toggle");
+      const menuList = document.getElementById("menu-list");
+      const portfolioToggle = document.getElementById("portfolio-toggle");
+      const portfolioList = document.getElementById("portfolio-list");
+      menuToggle.addEventListener("click", () => {
+        menuList.hidden = !menuList.hidden;
+        portfolioList.hidden = true;
+      });
+      portfolioToggle.addEventListener("click", () => {
+        portfolioList.hidden = !portfolioList.hidden;
+        menuList.hidden = true;
+      });
+
+      // ABOUT C4 (left pill) — zooms out to the overview + opens the card
+      document.getElementById("about-toggle").addEventListener("click", () => {
+        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "overview" } }));
+        showAboutCard();
+        menuList.hidden = true;
+        portfolioList.hidden = true;
+      });
+      menuList.querySelectorAll("[data-action]").forEach((item) => {
+        item.addEventListener("click", () => {
+          menuList.hidden = true;
+          const action = item.dataset.action;
+          if (action === "about") {
+            window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "overview" } }));
+            showAboutCard();
+          } else if (action === "goal") {
+            const name = item.dataset.goal;
+            window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name } }));
+            showGoalCard(name);
+          } else {
+            window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "overview" } }));
+            panel.hidden = true;
+          }
+        });
       });
     })();
   </script>
 
-  <script type="module" src="js/main.js?v=4"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
