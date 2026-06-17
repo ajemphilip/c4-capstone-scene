@@ -305,25 +305,66 @@ const SHELTER      = { x:  11.6, z: 13.8 };
 /* The four monuments stand INSIDE the city at the midpoint of each side,
    pressed against the inner edge of the perimeter road — visible from the
    streets and framed by the city around them.
-   Loop road inner edges: x=±24.8, z=±16.8. Plinth radius = 2.8 × 1.6 ≈ 4.5. */
+   Loop road inner edges: x=±24.8, z=±16.8. Plinth radius = 2.8 × 1.8 = 5.04. */
 const FOOD_BANK     = { x: 0,     z:  12.3 };  // South edge → ConnectionSculpture
 const THRESHOLD     = { x: 0,     z: -12.3 };  // North edge → ThresholdSculpture
 const AFFORDABILITY = { x: -20.3, z:  0    };  // West edge  → AffordabilitySculpture
 const TRANSITION    = { x: 20.3,  z:  0    };  // East edge  → TransitionSculpture
 
-const SCULPT_SCALE = 1.6;
+const SCULPT_SCALE = 1.8;   // bigger than the original 1.6, but small enough
+                            // that all six clear the civic buildings (2.0 can't)
 
-/* The three themed statues arranged as a triangle inside the city so
-   each reads clearly from the default (south-east) camera — none hides
-   behind another. About C4 sits back-center; Teams + Partners flank the
-   front corners. */
-const ABOUT_POS    = { x: 0,   z: -3 };   // center (pulled forward)
-const TEAMS_POS    = { x: -16, z: 6 };    // front-left
-const PARTNERS_POS = { x: 16,  z: 6 };    // front-right
+/* Six team statues — one per launchpad team (C1–C6) — arranged in a
+   hexagon (elliptical: wider in x, shorter in z) around the plaza so each
+   reads clearly and none sits in the Food Bank / Shelter footprint. */
+const TEAMS = [
+  { id: "c1", code: "C1", name: "THE COST OF INACTION",       page: "pages/team-c1.html", color: "#e8506a", shape: "ico",    blurb: "A data-driven campaign on the social and economic cost of inaction on homelessness." },
+  { id: "c2", code: "C2", name: "HOUSING FIRST NAVIGATOR",    page: "pages/team-c2.html", color: "#4a90d9", shape: "knot",   blurb: "Guiding people to stable housing first — then building support around it." },
+  { id: "c3", code: "C3", name: "RESOURCE ACCESS PORTAL",     page: "pages/team-c3.html", color: "#3aa88a", shape: "octa",   blurb: "Making local services visible, searchable and reachable for people in need." },
+  { id: "c4", code: "C4", name: "TRANSITION MENTORSHIP NETWORK", page: "pages/team-c4.html", color: "#e8a23a", shape: "dodec",  blurb: "Pairing people leaving homelessness with mentors for the road to independence." },
+  { id: "c5", code: "C5", name: "AFFORDABLE HOUSING DESIGN LAB", page: "pages/team-c5.html", color: "#9a6fd0", shape: "torus",  blurb: "Designing housing models people can actually afford to live in." },
+  { id: "c6", code: "C6", name: "PEER SUPPORT CIRCLE",        page: "pages/team-c6.html", color: "#e07840", shape: "sphere", blurb: "Connection and recovery through people with shared lived experience." },
+];
+/* Place the six statues ON THE CITY EDGES — distributed around the inner
+   perimeter of the loop road, kept clear of the civic buildings (Food Bank /
+   Shelter / Warming Centre) and spaced apart. Farthest-point sampling over the
+   clear perimeter spreads them evenly along the available edges. */
+{
+  const BASE = 2.8 * SCULPT_SCALE;                       // plinth base radius
+  const CIVIC = [
+    { x: FOODBANK_POS.x, z: FOODBANK_POS.z, r: 3.0 },
+    { x: SHELTER.x,      z: SHELTER.z,      r: 3.0 },
+    { x: LIBRARY.x,      z: LIBRARY.z,      r: 2.2 },
+  ];
+  const EX = 24.0 - BASE - 0.3, EZ = 16.2 - BASE - 0.3;  // perimeter, inset off the road
+  const W = 2 * EX, H = 2 * EZ, PER = 2 * (W + H);
+  const perim = (t) => {                                 // point at fraction t around the rectangle
+    let d = (((t % 1) + 1) % 1) * PER;
+    if (d < W) return [-EX + d, EZ];
+    d -= W; if (d < H) return [EX, EZ - d];
+    d -= H; if (d < W) return [EX - d, -EZ];
+    d -= W; return [-EX, -EZ + d];
+  };
+  const clear = (p) => CIVIC.every((c) => Math.hypot(p[0] - c.x, p[1] - c.z) >= BASE + c.r + 0.3);
+  const cand = [];
+  for (let s = 0; s < 480; s++) { const p = perim(s / 480); if (clear(p)) cand.push(p); }
+  const chosen = cand.length ? [cand[0]] : [[0, 0]];
+  while (chosen.length < 6 && cand.length) {             // farthest-point sampling
+    let bp = cand[0], bd = -1;
+    for (const p of cand) {
+      let md = Infinity;
+      for (const q of chosen) md = Math.min(md, Math.hypot(p[0] - q[0], p[1] - q[1]));
+      if (md > bd) { bd = md; bp = p; }
+    }
+    chosen.push(bp);
+  }
+  chosen.sort((a, b) => Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]));   // assign C1..C6 around the edge
+  TEAMS.forEach((t, i) => { const p = chosen[i] || [0, 0]; t.x = p[0]; t.z = p[1]; });
+}
 
 /* Hard-collision data for the flock: statue centers + keep-out radius. */
-const SCULPT_CENTERS = [ABOUT_POS, TEAMS_POS, PARTNERS_POS];
-const SCULPT_RADIUS = 5.4;   // plinth (2.8 × 1.6) + walking margin
+const SCULPT_CENTERS = TEAMS;
+const SCULPT_RADIUS = 5.3;   // plinth (2.8 × 1.8 = 5.04) + walking margin
 
 /* Clear every grid cell whose center falls inside a monument plaza or a
    civic-building footprint so towers never crowd them. */
@@ -394,6 +435,7 @@ for (let col = 0; col < GRID_COLS; col++) {
       ? { w: w * 0.62, d: d * 0.62, h: 1.5 + Math.random() * 1.5 }
       : null;
     BUILDINGS.push({
+      bi: BUILDINGS.length,   // stable building id — links every part for collapse
       x: cx,
       z: cz,
       w, h, d,
@@ -424,6 +466,7 @@ for (const b of BOX_BLDGS) {
   const topY = b.groundY + b.h + (b.t2 ? b.t2.h : 0);
   if (Math.random() < 0.55) {
     ROOF_UNITS.push({
+      bi: b.bi,
       x: b.x + (Math.random() - 0.5) * tw * 0.45,
       z: b.z + (Math.random() - 0.5) * td * 0.45,
       y: topY + 0.16,
@@ -433,6 +476,7 @@ for (const b of BOX_BLDGS) {
   }
   if (Math.random() < 0.30) {
     ROOF_TANKS.push({
+      bi: b.bi,
       x: b.x + (Math.random() - 0.5) * tw * 0.4,
       z: b.z + (Math.random() - 0.5) * td * 0.4,
       y: topY + 0.45,
@@ -448,10 +492,10 @@ for (const b of BOX_BLDGS) {
   const tw = (b.t2 ? b.t2.w : b.w) + 0.06;
   const td = (b.t2 ? b.t2.d : b.d) + 0.06;
   const railY = b.groundY + b.h + (b.t2 ? b.t2.h : 0) + 0.18 + 0.10;
-  ROOF_RAILS.push({ x: b.x, z: b.z + td / 2, y: railY, len: tw, ry: 0 });
-  ROOF_RAILS.push({ x: b.x, z: b.z - td / 2, y: railY, len: tw, ry: 0 });
-  ROOF_RAILS.push({ x: b.x + tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
-  ROOF_RAILS.push({ x: b.x - tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
+  ROOF_RAILS.push({ bi: b.bi, x: b.x, z: b.z + td / 2, y: railY, len: tw, ry: 0 });
+  ROOF_RAILS.push({ bi: b.bi, x: b.x, z: b.z - td / 2, y: railY, len: tw, ry: 0 });
+  ROOF_RAILS.push({ bi: b.bi, x: b.x + tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
+  ROOF_RAILS.push({ bi: b.bi, x: b.x - tw / 2, z: b.z, y: railY, len: td, ry: Math.PI / 2 });
 }
 
 /* Cylindrical towers get horizontal floor bands instead of windows. */
@@ -460,6 +504,7 @@ for (const b of CYL_BLDGS) {
   const floors = Math.floor(b.h / 1.2);
   for (let f = 1; f <= floors; f++) {
     CYL_BANDS.push({
+      bi: b.bi,
       x: b.x, z: b.z,
       y: b.groundY + f * 1.2 - 0.25,
       w: b.w + 0.06,
@@ -503,6 +548,7 @@ for (const b of BUILDINGS) {
         pool.push({
           pos: [wx, wy + b.groundY, wz],
           ry: f.ry,
+          bi: b.bi,
         });
       }
     }
@@ -510,6 +556,80 @@ for (const b of BUILDINGS) {
 }
 if (BUILDING_WINDOWS_LIT.length === 0 && BUILDING_WINDOWS_DARK.length > 0) {
   BUILDING_WINDOWS_LIT.push(BUILDING_WINDOWS_DARK.pop());
+}
+
+/* =========================================================
+   Click-to-collapse "physics" — touch a building and the whole
+   thing topples over (every part rotates rigidly about its base),
+   lies a while, then rises back. Trees use the same topple. It's a
+   light kinematic fall (not a full solver), so it stays cheap: the
+   per-frame loop only runs while something is mid-collapse.
+   ========================================================= */
+const _cv = new THREE.Vector3();
+const _cq = new THREE.Quaternion();
+const COLLAPSE_B = new Map();        // building id -> { t0, axis, pivot }
+const BUILDING_PARTS = new Map();    // building id -> [{ el, pos:[x,y,z], q:Quaternion }]
+
+/* Every <Instance> registers itself under its building id with its base
+   transform, so a collapse can topple all of a building's parts as one. */
+function regPart(bi, pos, ry) {
+  return (el) => {
+    if (!el) return;
+    let arr = BUILDING_PARTS.get(bi);
+    if (!arr) BUILDING_PARTS.set(bi, (arr = []));
+    arr.push({ el, pos, q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry || 0, 0)) });
+  };
+}
+
+const COL_FALL = 0.7, COL_HOLD = 5.0, COL_RISE = 1.2, COL_TARGET = Math.PI * 0.49;
+/* Topple angle over time: accelerating fall → lie flat → ease back up.
+   Returns -1 once the cycle is complete (caller restores + clears). */
+function toppleAngle(e) {
+  if (e < COL_FALL) { const p = e / COL_FALL; return COL_TARGET * p * p; }
+  if (e < COL_FALL + COL_HOLD) return COL_TARGET;
+  if (e < COL_FALL + COL_HOLD + COL_RISE) {
+    const p = (e - COL_FALL - COL_HOLD) / COL_RISE;
+    return COL_TARGET * (1 - (1 - (1 - p) * (1 - p)));
+  }
+  return -1;
+}
+
+function startBuildingCollapse(b) {
+  if (!b || COLLAPSE_B.has(b.bi)) return;
+  const ang = Math.random() * Math.PI * 2;
+  COLLAPSE_B.set(b.bi, {
+    t0: -1,
+    axis: new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang)),
+    pivot: [b.x, b.groundY, b.z],
+  });
+}
+
+/* Drives every in-progress building collapse. Mounted once inside <City>. */
+function BuildingCollapse() {
+  useFrame((state) => {
+    if (COLLAPSE_B.size === 0) return;
+    const now = state.clock.elapsedTime;
+    for (const [bi, c] of COLLAPSE_B) {
+      if (c.t0 < 0) c.t0 = now;
+      const theta = toppleAngle(now - c.t0);
+      const parts = BUILDING_PARTS.get(bi);
+      if (theta < 0) {                       // finished — snap parts back to base
+        if (parts) for (const p of parts) {
+          p.el.position.set(p.pos[0], p.pos[1], p.pos[2]);
+          p.el.quaternion.copy(p.q);
+        }
+        COLLAPSE_B.delete(bi);
+        continue;
+      }
+      _cq.setFromAxisAngle(c.axis, theta);
+      if (parts) for (const p of parts) {
+        _cv.set(p.pos[0] - c.pivot[0], p.pos[1] - c.pivot[1], p.pos[2] - c.pivot[2]).applyQuaternion(_cq);
+        p.el.position.set(c.pivot[0] + _cv.x, c.pivot[1] + _cv.y, c.pivot[2] + _cv.z);
+        p.el.quaternion.copy(_cq).multiply(p.q);
+      }
+    }
+  });
+  return null;
 }
 
 function BuildingDetails() {
@@ -521,7 +641,7 @@ function BuildingDetails() {
         <planeGeometry args=${[WIN_W, WIN_H]} />
         <meshStandardMaterial color="#1a2030" roughness=${0.35} metalness=${0.1} />
         ${BUILDING_WINDOWS_DARK.map((w, i) => html`
-          <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
+          <${Instance} key=${i} ref=${regPart(w.bi, w.pos, w.ry)} position=${w.pos} rotation=${[0, w.ry, 0]} />
         `)}
       </${Instances}>
       <!-- Always-lit windows — burn brighter once the sun drops -->
@@ -536,7 +656,7 @@ function BuildingDetails() {
           toneMapped=${false}
         />
         ${BUILDING_WINDOWS_LIT.map((w, i) => html`
-          <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
+          <${Instance} key=${i} ref=${regPart(w.bi, w.pos, w.ry)} position=${w.pos} rotation=${[0, w.ry, 0]} />
         `)}
       </${Instances}>
       <!-- Dusk/night windows — dark glass by day, light up after sunset -->
@@ -551,7 +671,7 @@ function BuildingDetails() {
           toneMapped=${false}
         />
         ${BUILDING_WINDOWS_DUSK.map((w, i) => html`
-          <${Instance} key=${i} position=${w.pos} rotation=${[0, w.ry, 0]} />
+          <${Instance} key=${i} ref=${regPart(w.bi, w.pos, w.ry)} position=${w.pos} rotation=${[0, w.ry, 0]} />
         `)}
       </${Instances}>
     </group>
@@ -743,9 +863,14 @@ function _statueBandTex(label) {
   ctx.fillStyle = "#d8b98a";
   ctx.fillRect(0, 8, canvas.width, 4);
   ctx.fillRect(0, canvas.height - 12, canvas.width, 4);
-  ctx.font = "700 60px Poppins, Verdana, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  // Auto-shrink so long team names fit within each half of the drum
+  let size = 60;
+  do {
+    ctx.font = `700 ${size}px Poppins, Verdana, sans-serif`;
+    size -= 3;
+  } while (ctx.measureText(label).width > 940 && size > 24);
   ctx.fillStyle = "#6a4a28";
   ctx.fillText(label, 512, 68);
   ctx.fillText(label, 1536, 68);
@@ -754,9 +879,35 @@ function _statueBandTex(label) {
   tex.wrapS = THREE.RepeatWrapping;
   return tex;
 }
-const ABOUT_BAND_TEX    = _statueBandTex("ABOUT C4");
-const TEAMS_BAND_TEX    = _statueBandTex("TEAMS");
-const PARTNERS_BAND_TEX = _statueBandTex("PARTNERS");
+/* One band texture per team, keyed by id. */
+const TEAM_BAND_TEX = {};
+for (const t of TEAMS) TEAM_BAND_TEX[t.id] = _statueBandTex(t.code + " · " + t.name);
+
+/* Bold "C#" badge texture (matches the page badge: black rounded tile,
+   white code) — floated above each statue so the team is unmistakable. */
+function _codeTex(code) {
+  const cv = document.createElement("canvas");
+  cv.width = 256; cv.height = 256;
+  const x = cv.getContext("2d");
+  const ox = 28, oy = 28, w = 200, h = 200, r = 46;
+  x.fillStyle = "#111";
+  x.beginPath();
+  x.moveTo(ox + r, oy);
+  x.arcTo(ox + w, oy, ox + w, oy + h, r);
+  x.arcTo(ox + w, oy + h, ox, oy + h, r);
+  x.arcTo(ox, oy + h, ox, oy, r);
+  x.arcTo(ox, oy, ox + w, oy, r);
+  x.closePath(); x.fill();
+  x.fillStyle = "#fff";
+  x.font = "900 132px Poppins, Arial Black, sans-serif";
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(code, 128, 142);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 8;
+  return tex;
+}
+const TEAM_CODE_TEX = {};
+for (const t of TEAMS) TEAM_CODE_TEX[t.id] = _codeTex(t.code);
 
 /* Ring of small shiny gems orbiting a statue's heart — chrome + gold
    accents that sparkle as the monument turns. Counter-rotates a touch
@@ -826,115 +977,62 @@ function StatuePlinth({ bandTex }) {
   `;
 }
 
-function C4Statue() {
-  const groupRef = useRef();
+/* A team's shiny emblem — geometry varies per team for visual variety,
+   in the team's colour, polished metal with an emissive glow. */
+function TeamEmblem({ shape, color }) {
+  const ref = useRef();
   useFrame((_, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
+    if (ref.current) ref.current.rotation.y += Math.min(dt, 0.05) * 0.5;
   });
+  const geo =
+    shape === "knot"   ? html`<torusKnotGeometry args=${[0.62, 0.2, 90, 14]} />`
+  : shape === "octa"   ? html`<octahedronGeometry args=${[0.95, 0]} />`
+  : shape === "dodec"  ? html`<dodecahedronGeometry args=${[0.9, 0]} />`
+  : shape === "torus"  ? html`<torusGeometry args=${[0.75, 0.26, 20, 44]} />`
+  : shape === "sphere" ? html`<icosahedronGeometry args=${[0.9, 1]} />`
+  :                      html`<icosahedronGeometry args=${[0.95, 0]} />`;  // "ico"
   return html`
-    <group ref=${groupRef} position=${[ABOUT_POS.x, 0, ABOUT_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "c4")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${ABOUT_BAND_TEX} />
-      <!-- chrome pedestal sphere the letters sit on -->
-      <mesh position=${[0, 0.66, 0]} castShadow>
-        <icosahedronGeometry args=${[0.55, 1]} />
-        <meshStandardMaterial color="#cfd6dc" metalness=${0.95} roughness=${0.1}
-          emissive="#aac4ff" emissiveIntensity=${0.22} toneMapped=${false} />
+    <group ref=${ref} position=${[0, 1.9, 0]}>
+      <mesh castShadow>
+        ${geo}
+        <meshStandardMaterial color=${color} metalness=${0.9} roughness=${0.14}
+          emissive=${color} emissiveIntensity=${0.35} toneMapped=${false} />
       </mesh>
-      <${C4Letters} />
-      <${OrbitGems} y=${4.2} radius=${2.0} count=${10} accent="#ffcf4d" />
-      <${OrbitGems} y=${3.0} radius=${1.4} count=${6} tilt=${-0.45} accent="#aac4ff" />
     </group>
   `;
 }
 
-/* Teams statue — a ring of figures (a team) standing together. */
-function TeamsStatue() {
+/* Generic team statue — plinth + name band + a glowing chrome pedestal +
+   the team's emblem + orbiting gems. Click → that team's page card. */
+function TeamStatue({ team }) {
   const groupRef = useRef();
   useFrame((_, dt) => {
     if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
   });
-  const figs = useMemo(() => {
-    const cols = ["#e84050", "#2860c8", "#e8c020", "#40a040", "#c860c8", "#e08018"];
-    const arr = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      arr.push({ x: Math.cos(a) * 1.05, z: Math.sin(a) * 1.05, ry: a + Math.PI, c: cols[i] });
-    }
-    return arr;
-  }, []);
   return html`
-    <group ref=${groupRef} position=${[TEAMS_POS.x, 0, TEAMS_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "teams")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${TEAMS_BAND_TEX} />
-      <!-- shared golden core the team gathers around -->
-      <mesh position=${[0, 1.4, 0]}>
-        <icosahedronGeometry args=${[0.5, 1]} />
-        <meshStandardMaterial color="#f0c040" emissive="#ffcf4d"
-          emissiveIntensity=${1.4} metalness=${0.9} roughness=${0.15} toneMapped=${false} />
+    <group ref=${groupRef} position=${[team.x, 0, team.z]} scale=${SCULPT_SCALE}>
+      <${StatuePlinth} bandTex=${TEAM_BAND_TEX[team.id]} />
+      <!-- chrome pedestal under the emblem -->
+      <mesh position=${[0, 0.72, 0]} castShadow>
+        <cylinderGeometry args=${[0.5, 0.62, 0.5, 20]} />
+        <meshStandardMaterial color="#cfd6dc" metalness=${0.95} roughness=${0.12}
+          emissive="#aac4ff" emissiveIntensity=${0.15} toneMapped=${false} />
       </mesh>
-      <pointLight position=${[0, 1.4, 0]} color="#ffd28a" intensity=${1.6} distance=${5} />
-      ${figs.map((f, i) => html`
-        <group key=${i} position=${[f.x, 0.54, f.z]} rotation=${[0, f.ry, 0]}>
-          <mesh position=${[0, 0.6, 0]} castShadow>
-            <cylinderGeometry args=${[0.22, 0.26, 1.1, 14]} />
-            <meshStandardMaterial color=${f.c} roughness=${0.6} metalness=${0.2} />
-          </mesh>
-          <mesh position=${[0, 1.36, 0]} castShadow>
-            <sphereGeometry args=${[0.21, 16, 16]} />
-            <meshStandardMaterial color="#d4a373" roughness=${0.7} />
-          </mesh>
-          <!-- chrome shoulder band -->
-          <mesh position=${[0, 1.0, 0]}>
-            <torusGeometry args=${[0.26, 0.04, 8, 20]} />
-            <meshStandardMaterial color="#dfe6ec" metalness=${0.95} roughness=${0.12}
-              emissive="#bfe0ff" emissiveIntensity=${0.3} toneMapped=${false} />
-          </mesh>
-        </group>
-      `)}
-      <${OrbitGems} y=${2.6} radius=${1.9} count=${10} accent="#ffcf4d" />
+      <${TeamEmblem} shape=${team.shape} color=${team.color} />
+      <pointLight position=${[0, 1.9, 0]} color=${team.color} intensity=${1.0} distance=${5} />
+      <${OrbitGems} y=${2.5} radius=${1.9} count=${10} accent=${team.color} />
+      <!-- Floating "C#" badge — always faces the camera, on the spin axis -->
+      <sprite position=${[0, 3.6, 0]} scale=${[1.05, 1.05, 1]}>
+        <spriteMaterial map=${TEAM_CODE_TEX[team.id]} transparent=${true} toneMapped=${false} depthWrite=${false} />
+      </sprite>
     </group>
   `;
 }
 
-/* Partners statue — two interlocking rings (a union/handshake symbol). */
-function PartnersStatue() {
-  const groupRef = useRef();
-  useFrame((_, dt) => {
-    if (groupRef.current) groupRef.current.rotation.y += Math.min(dt, 0.05) * 0.10;
-  });
+function TeamStatues() {
   return html`
-    <group ref=${groupRef} position=${[PARTNERS_POS.x, 0, PARTNERS_POS.z]} scale=${SCULPT_SCALE}
-      onClick=${(e) => openGoal(e, "partners")}>
-      <${GoalArrow} />
-      <${StatuePlinth} bandTex=${PARTNERS_BAND_TEX} />
-      <!-- chrome support post -->
-      <mesh position=${[0, 1.7, 0]} castShadow>
-        <cylinderGeometry args=${[0.13, 0.18, 2.4, 12]} />
-        <meshStandardMaterial color="#cfd6dc" roughness=${0.18} metalness=${0.92}
-          emissive="#aac4ff" emissiveIntensity=${0.12} toneMapped=${false} />
-      </mesh>
-      <!-- two interlocking polished rings — chrome + gold -->
-      <mesh position=${[-0.6, 3.2, 0]} castShadow>
-        <torusGeometry args=${[1.1, 0.22, 24, 60]} />
-        <meshStandardMaterial color="#dfe6ec" metalness=${0.97} roughness=${0.08}
-          emissive="#bfe0ff" emissiveIntensity=${0.28} toneMapped=${false} />
-      </mesh>
-      <mesh position=${[0.6, 3.2, 0]} rotation=${[0, Math.PI / 2, 0]} castShadow>
-        <torusGeometry args=${[1.1, 0.22, 24, 60]} />
-        <meshStandardMaterial color="#e8b84d" metalness=${0.97} roughness=${0.08}
-          emissive="#ffcf4d" emissiveIntensity=${0.3} toneMapped=${false} />
-      </mesh>
-      <!-- glowing junction where the rings meet -->
-      <mesh position=${[0, 3.2, 0]}>
-        <sphereGeometry args=${[0.3, 20, 20]} />
-        <meshStandardMaterial color="#fff5dc" emissive="#ffd28a"
-          emissiveIntensity=${2.2} toneMapped=${false} />
-      </mesh>
-      <pointLight position=${[0, 3.2, 0]} color="#ffd9a0" intensity=${1.8} distance=${6} />
-      <${OrbitGems} y=${3.2} radius=${2.0} count=${12} tilt=${0.5} accent="#ffcf4d" />
+    <group>
+      ${TEAMS.map((t) => html`<${TeamStatue} key=${t.id} team=${t} />`)}
     </group>
   `;
 }
@@ -1147,7 +1245,6 @@ function ConnectionSculpture() {
   return html`
     <group ref=${groupRef} position=${[FOOD_BANK.x, 0, FOOD_BANK.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "connection")}>
-      <${GoalArrow} />
       <!-- Plinth — wide outer ring -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.5, 2.7, 0.3, 32]} />
@@ -1268,7 +1365,6 @@ function TransitionSculpture() {
   return html`
     <group ref=${groupRef} position=${[TRANSITION.x, 0, TRANSITION.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "transition")}>
-      <${GoalArrow} />
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -1393,7 +1489,6 @@ function ThresholdSculpture() {
   return html`
     <group ref=${groupRef} position=${[THRESHOLD.x, 0, THRESHOLD.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "threshold")}>
-      <${GoalArrow} />
       <!-- Plinth -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -1545,7 +1640,6 @@ function AffordabilitySculpture() {
   return html`
     <group ref=${groupRef} position=${[AFFORDABILITY.x, 0, AFFORDABILITY.z]} scale=${SCULPT_SCALE}
       onClick=${(e) => openGoal(e, "affordability")}>
-      <${GoalArrow} />
       <!-- Plinth — same two-tier dimensions as the other monuments -->
       <mesh position=${[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args=${[2.6, 2.8, 0.3, 36]} />
@@ -2251,12 +2345,15 @@ const TENT_PACK_COLORS_LIST = ["#3868a0", "#c84030", "#487868", "#e08020", "#706
 function City() {
   return html`
     <group>
+      <${BuildingCollapse} />
       <!-- Box walls -->
       <${Instances} limit=${Math.max(1, BOX_BLDGS.length)} castShadow receiveShadow>
         <boxGeometry args=${[1, 1, 1]} />
         <meshStandardMaterial roughness=${0.85} />
         ${BOX_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + b.h / 2, b.z], b.ry)}
+            onClick=${(e) => { e.stopPropagation(); startBuildingCollapse(b); }}
             position=${[b.x, b.groundY + b.h / 2, b.z]}
             scale=${[b.w, b.h, b.d]}
             rotation=${[0, b.ry, 0]}
@@ -2270,6 +2367,8 @@ function City() {
         <meshStandardMaterial roughness=${0.85} />
         ${CYL_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + b.h / 2, b.z], 0)}
+            onClick=${(e) => { e.stopPropagation(); startBuildingCollapse(b); }}
             position=${[b.x, b.groundY + b.h / 2, b.z]}
             scale=${[b.w, b.h, b.w]}
             color=${b.color} />
@@ -2282,6 +2381,7 @@ function City() {
         <meshStandardMaterial roughness=${0.9} />
         ${CYL_BANDS.map((r, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(r.bi, [r.x, r.y, r.z], 0)}
             position=${[r.x, r.y, r.z]}
             scale=${[r.w, 0.22, r.w]}
             color=${r.color} />
@@ -2294,6 +2394,7 @@ function City() {
         <meshStandardMaterial roughness=${0.85} />
         ${TIERED_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + b.h + b.t2.h / 2, b.z], 0)}
             position=${[b.x, b.groundY + b.h + b.t2.h / 2, b.z]}
             scale=${[b.t2.w, b.t2.h, b.t2.d]}
             color=${b.color} />
@@ -2306,6 +2407,7 @@ function City() {
         <meshStandardMaterial roughness=${0.9} />
         ${BOX_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + b.h + (b.t2 ? b.t2.h : 0) + 0.09, b.z], 0)}
             position=${[b.x, b.groundY + b.h + (b.t2 ? b.t2.h : 0) + 0.09, b.z]}
             scale=${[(b.t2 ? b.t2.w : b.w) + 0.14, 0.18, (b.t2 ? b.t2.d : b.d) + 0.14]}
             color=${b.roofColor} />
@@ -2318,6 +2420,7 @@ function City() {
         <meshStandardMaterial roughness=${0.9} />
         ${CYL_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + b.h + 0.08, b.z], 0)}
             position=${[b.x, b.groundY + b.h + 0.08, b.z]}
             scale=${[b.w + 0.14, 0.16, b.w + 0.14]}
             color=${b.roofColor} />
@@ -2330,6 +2433,7 @@ function City() {
         <meshStandardMaterial color="#3c4148" roughness=${0.6} metalness=${0.4} />
         ${ROOF_RAILS.map((r, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(r.bi, [r.x, r.y, r.z], r.ry)}
             position=${[r.x, r.y, r.z]}
             rotation=${[0, r.ry, 0]}
             scale=${[r.len, 1, 1]} />
@@ -2342,6 +2446,7 @@ function City() {
         <meshStandardMaterial roughness=${0.9} />
         ${BOX_BLDGS.map((b, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(b.bi, [b.x, b.groundY + 0.35, b.z], 0)}
             position=${[b.x, b.groundY + 0.35, b.z]}
             scale=${[b.w + 0.08, 0.7, b.d + 0.08]}
             color=${b.baseColor} />
@@ -2354,6 +2459,7 @@ function City() {
         <meshStandardMaterial color="#b8bcc2" roughness=${0.6} metalness=${0.35} />
         ${ROOF_UNITS.map((u, i) => html`
           <${Instance} key=${i}
+            ref=${regPart(u.bi, [u.x, u.y, u.z], u.ry)}
             position=${[u.x, u.y, u.z]}
             rotation=${[0, u.ry, 0]}
             scale=${[u.s, u.s, u.s]} />
@@ -2365,7 +2471,8 @@ function City() {
         <cylinderGeometry args=${[0.28, 0.32, 0.7, 10]} />
         <meshStandardMaterial color="#8a7a64" roughness=${0.8} />
         ${ROOF_TANKS.map((t, i) => html`
-          <${Instance} key=${i} position=${[t.x, t.y, t.z]} scale=${[t.s, t.s, t.s]} />
+          <${Instance} key=${i} ref=${regPart(t.bi, [t.x, t.y, t.z], 0)}
+            position=${[t.x, t.y, t.z]} scale=${[t.s, t.s, t.s]} />
         `)}
       </${Instances}>
     </group>
@@ -2623,6 +2730,24 @@ const ROUND_TREES = TREES.filter((t) => t.type === "round");
 const PINE_COLORS  = ["#3e8a30", "#4a9438", "#2e8048", "#4c9028", "#388830", "#5a9c34"];
 const ROUND_COLORS = ["#74c050", "#88d058", "#9cc858", "#80b848", "#a8d068", "#7cb850"];
 
+/* Per-tree canopy sub-index + reverse maps so a click on any part (trunk
+   or canopy) resolves to its tree, and both fall together. */
+const PINE_TO_TREE = [], ROUND_TO_TREE = [];
+{
+  let pi = 0, ri = 0;
+  for (let i = 0; i < TREES.length; i++) {
+    const t = TREES[i];
+    if (t.type === "pine") { t.ci = pi; PINE_TO_TREE[pi] = i; pi++; }
+    else                   { t.ci = ri; ROUND_TO_TREE[ri] = i; ri++; }
+  }
+}
+const COLLAPSE_T = new Map();   // tree index -> { t0, axis }
+function startTreeCollapse(i) {
+  if (i == null || i < 0 || COLLAPSE_T.has(i)) return;
+  const ang = Math.random() * Math.PI * 2;
+  COLLAPSE_T.set(i, { t0: -1, axis: new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang)) });
+}
+
 /* Raw InstancedMesh trees — skips drei's per-Instance React reconciliation.
    One setMatrixAt + setColorAt pass on mount, then the GPU buffers stay
    static for the rest of the session (trees never move). */
@@ -2680,17 +2805,58 @@ function Trees() {
     if (roundRef.current.instanceColor) roundRef.current.instanceColor.needsUpdate = true;
   }, []);
 
+  // Click-to-fell: topple a tree (trunk + canopy) about its base, hold, rise.
+  useFrame((state) => {
+    if (COLLAPSE_T.size === 0) return;
+    if (!trunkRef.current || !pineRef.current || !roundRef.current) return;
+    const now = state.clock.elapsedTime;
+    for (const [i, c] of COLLAPSE_T) {
+      if (c.t0 < 0) c.t0 = now;
+      const theta = toppleAngle(now - c.t0);
+      const t = TREES[i];
+      const isPine = t.type === "pine";
+      const canopy = isPine ? pineRef.current : roundRef.current;
+      const trunkY = t.hy + 0.5 * t.s;
+      const canopyY = t.hy + (isPine ? (1 + 1.3) : (1 + 0.85)) * t.s;
+      if (theta < 0) {                       // finished — restore upright
+        dummy.rotation.set(0, 0, 0); dummy.scale.set(t.s, t.s, t.s);
+        dummy.position.set(t.x, trunkY, t.z); dummy.updateMatrix();
+        trunkRef.current.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(t.x, canopyY, t.z); dummy.updateMatrix();
+        canopy.setMatrixAt(t.ci, dummy.matrix);
+        trunkRef.current.instanceMatrix.needsUpdate = true;
+        canopy.instanceMatrix.needsUpdate = true;
+        COLLAPSE_T.delete(i);
+        continue;
+      }
+      _cq.setFromAxisAngle(c.axis, theta);
+      dummy.quaternion.copy(_cq); dummy.scale.set(t.s, t.s, t.s);
+      // trunk + canopy sit directly above the base, so the lever arm is (0, dy, 0)
+      _cv.set(0, trunkY - t.hy, 0).applyQuaternion(_cq);
+      dummy.position.set(t.x + _cv.x, t.hy + _cv.y, t.z + _cv.z); dummy.updateMatrix();
+      trunkRef.current.setMatrixAt(i, dummy.matrix);
+      _cv.set(0, canopyY - t.hy, 0).applyQuaternion(_cq);
+      dummy.position.set(t.x + _cv.x, t.hy + _cv.y, t.z + _cv.z); dummy.updateMatrix();
+      canopy.setMatrixAt(t.ci, dummy.matrix);
+      trunkRef.current.instanceMatrix.needsUpdate = true;
+      canopy.instanceMatrix.needsUpdate = true;
+    }
+  });
+
   return html`
     <group>
-      <instancedMesh ref=${trunkRef} args=${[undefined, undefined, TREE_COUNT]} castShadow receiveShadow>
+      <instancedMesh ref=${trunkRef} args=${[undefined, undefined, TREE_COUNT]} castShadow receiveShadow
+        onClick=${(e) => { e.stopPropagation(); startTreeCollapse(e.instanceId); }}>
         <cylinderGeometry args=${[0.14, 0.18, 1, 8]} />
         <meshStandardMaterial color="#7a4a2a" roughness=${0.95} />
       </instancedMesh>
-      <instancedMesh ref=${pineRef} args=${[undefined, undefined, PINE_COUNT]} castShadow>
+      <instancedMesh ref=${pineRef} args=${[undefined, undefined, PINE_COUNT]} castShadow
+        onClick=${(e) => { e.stopPropagation(); startTreeCollapse(PINE_TO_TREE[e.instanceId]); }}>
         <coneGeometry args=${[1.1, 2.6, 8]} />
         <meshStandardMaterial roughness=${0.85} />
       </instancedMesh>
-      <instancedMesh ref=${roundRef} args=${[undefined, undefined, ROUND_COUNT]} castShadow>
+      <instancedMesh ref=${roundRef} args=${[undefined, undefined, ROUND_COUNT]} castShadow
+        onClick=${(e) => { e.stopPropagation(); startTreeCollapse(ROUND_TO_TREE[e.instanceId]); }}>
         <sphereGeometry args=${[0.95, 10, 10]} />
         <meshStandardMaterial roughness=${0.85} />
       </instancedMesh>
@@ -3234,12 +3400,6 @@ function focusOnSculpture(name) {
     FOCUS.active = true;
     return;
   }
-  if (name === "c4") {
-    FOCUS.target.set(ABOUT_POS.x, 4.0, ABOUT_POS.z);
-    FOCUS.camPos.set(ABOUT_POS.x + 13, 11, ABOUT_POS.z + 17);
-    FOCUS.active = true;
-    return;
-  }
   if (name === "back") {
     // Gentle retreat: keep the current viewing direction, just pull the
     // camera back to a comfortable roaming distance and ease the orbit
@@ -3255,21 +3415,22 @@ function focusOnSculpture(name) {
     FOCUS.active = true;
     return;
   }
-  const views = {
-    teams:    { p: TEAMS_POS,    y: 3.6, dist: 20 },
-    partners: { p: PARTNERS_POS, y: 3.6, dist: 20 },
-  };
-  const v = views[name];
-  if (!v) return;
-  const { x, z } = v.p;
-  FOCUS.target.set(x, v.y, z);
-  // Approach from outside the sculpture looking back toward the city
+  // Otherwise treat `name` as a team id and fly to that statue
+  const team = TEAMS.find((t) => t.id === name);
+  if (!team) return;
+  const x = team.x, z = team.z;
+  // Statues sit on the city edge: the open exterior is on their OUTWARD side
+  // and the city is behind them. So approach radially from OUTSIDE, closer and
+  // higher (a ~45° aerial three-quarter) — the statue fills the frame, the
+  // open road is in front, and the city stays behind it. Nothing can cover it.
+  const dist = 15;
+  FOCUS.target.set(x, 4.0, z);
   const hl = Math.max(0.001, Math.hypot(x, z));
   const dx = x / hl, dz = z / hl;
   FOCUS.camPos.set(
-    x + dx * v.dist * 0.78,
-    v.y + v.dist * 0.58,
-    z + dz * v.dist * 0.78
+    x + dx * dist * 0.75,
+    4.0 + dist * 0.75,
+    z + dz * dist * 0.75
   );
   FOCUS.active = true;
 }
@@ -3302,12 +3463,11 @@ function GoalArrow() {
   `;
 }
 
-/* Click handler shared by the four monuments: fly the camera there and
-   tell the page chrome to open the matching goal card. stopPropagation
-   keeps the click from also dropping a tent on the ground behind. */
+/* Click handler shared by the team statues: tell the page chrome which
+   team was clicked — the chrome drives the camera zoom + page transition.
+   stopPropagation keeps the click from also dropping a tent behind. */
 function openGoal(e, name) {
   e.stopPropagation();
-  focusOnSculpture(name);
   window.dispatchEvent(new CustomEvent("c4-goal", { detail: { name } }));
 }
 
@@ -4649,9 +4809,7 @@ function SceneContents({ dynTents }) {
       <${City} />
       <${BuildingDetails} />
       <${Parks} />
-      <${C4Statue} />
-      <${TeamsStatue} />
-      <${PartnersStatue} />
+      <${TeamStatues} />
       <${FoodBank} />
       <${Shelter} />
       <${WarmingCenter} />
@@ -4705,7 +4863,7 @@ function App() {
       shadows
       dpr=${[1, 1.3]}
       camera=${{ position: [36, 24, 46], fov: 55 }}
-      gl=${{ antialias: true }}
+      gl=${{ antialias: true, preserveDrawingBuffer: true }}
     >
       <color attach="background" args=${["#6db9f0"]} />
       <fog attach="fog" args=${["#dceefb", 55, 225]} />

@@ -144,6 +144,36 @@ h1 {
 }
 
 /* =========================================================
+   Site-wide page transition — native cross-document View Transitions.
+   The heading (kicker / badge / h1) is tagged as a shared element, so
+   the browser MORPHS it across the navigation instead of re-rendering
+   it — the text simply stays in place while the rest of the page
+   cross-fades. No reload flash, no JS.  (Chrome/Edge; degrades to an
+   instant navigation elsewhere.)
+   ========================================================= */
+@view-transition { navigation: auto; }
+
+h1          { view-transition-name: page-title;  }
+.kicker     { view-transition-name: page-kicker; }
+.team-badge { view-transition-name: page-badge;  }
+
+/* The heading holds in place; the background (everything in :root) appears
+   slowly. The OUTGOING layer governs the reveal rate (the live page sits
+   behind it), so both sides fade on the same slow, symmetric beat. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 1.1s;
+  animation-timing-function: ease-in-out;
+}
+::view-transition-group(page-title),
+::view-transition-group(page-kicker),
+::view-transition-group(page-badge) { animation-duration: 0.7s; }
+
+/* Mobile: drop the effect — instant navigation. */
+@media (max-width: 760px)               { @view-transition { navigation: none; } }
+@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+
+/* =========================================================
    Team portfolio pages
    ========================================================= */
 

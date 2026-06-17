@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=8" />
+  <link rel="stylesheet" href="css/style.css?v=17" />
 
   <script type="importmap">
   {
@@ -40,141 +40,150 @@
   <!-- R3F mounts here, full-bleed -->
   <div id="root"></div>
 
-  <!-- V2 chrome: no buttons — the arrows over the monuments are the UI -->
-  <header class="chrome">
-    <div class="chrome-left">
-      <a class="brand" href="#">C4<sup>®</sup></a>
-      <p class="chrome-tag">
-        A living city about homelessness —<br />
-        one neighbourhood, told in motion.
-      </p>
-      <div class="chrome-links">
-        <p>Three monuments stand in the city — click a glowing arrow to explore one:</p>
-        <p><strong>About C4</strong> · <strong>Teams</strong> · <strong>Partners</strong></p>
-        <p><a href="pages/02-contents.html"><strong>Portfolio</strong></a> — the full capstone write-up.</p>
-      </div>
-    </div>
-    <div class="chrome-right">
-      <p class="chrome-tag right">
-        Click a glowing arrow<br />
-        to explore a monument.
-      </p>
-    </div>
-  </header>
+  <!-- Brand -->
+  <a class="brand-fixed" href="#">C4<sup>®</sup></a>
 
-  <!-- Goal detail card — opens when a goal is selected from the pill menu -->
-  <aside class="goal-panel" id="goal-panel" hidden>
-    <button class="goal-close" id="goal-close" aria-label="Close">×</button>
-    <span class="goal-kicker" id="goal-kicker">PROJECT GOAL</span>
-    <h2 class="goal-title" id="goal-title"></h2>
-    <p class="goal-desc" id="goal-desc"></p>
-    <div class="goal-actions">
-      <a class="goal-btn goal-btn-primary" href="pages/01-title.html" id="goal-team">MEET THE TEAM</a>
-      <a class="goal-btn" href="#" id="goal-more">SEE THE PROJECT</a>
+  <!-- LEFT rail: Section C Management portfolio links -->
+  <nav class="side-rail left" id="rail-left" aria-label="Section C Management">
+    <span class="rail-label">SECTION C MANAGEMENT</span>
+  </nav>
+
+  <!-- RIGHT rail: the six launchpad teams -->
+  <nav class="side-rail right" id="rail-right" aria-label="Launchpad Teams">
+    <span class="rail-label">LAUNCHPAD TEAMS</span>
+  </nav>
+
+  <!-- MOBILE: a single top-right menu -->
+  <div class="mobile-bar">
+    <button class="pill menu-toggle" id="m-toggle" aria-expanded="false">MENU</button>
+  </div>
+  <div class="mobile-panel" id="m-panel" hidden></div>
+
+  <!-- Cinematic page transition: the team's heading block appears, slides
+       to its page position, and a white wipe lands on the matching page. -->
+  <div class="page-transition" id="pt" aria-hidden="true">
+    <div class="pt-bg"></div>
+    <div class="pt-main">
+      <span class="pt-kicker">C4 LAUNCHPAD · TEAM PROJECT</span>
+      <div class="pt-badge" id="pt-badge"></div>
+      <h1 class="pt-title" id="pt-title"></h1>
     </div>
-  </aside>
+  </div>
 
   <script>
-    // V2: chrome buttons removed — monuments (and their arrows) are the
-    // only navigation. Clicking one flies the camera + opens its card.
     (() => {
-      const GOALS = {
-        connection: {
-          title: "Community Connection",
-          desc: "No one belongs nowhere. We design ways for unhoused neighbours and the wider community to meet as equals — every thread in the sculpture ties one person to the same shared light.",
-        },
-        affordability: {
-          title: "Housing Affordability",
-          desc: "The homes exist — the wall of money between people and them keeps growing. This monument buries a warm, livable house under the cost of reaching it.",
-        },
-        threshold: {
-          title: "Access to Resources",
-          desc: "Support only works if you can reach it. The doorway stands for every threshold between someone in need and the shelter, food and care waiting on the other side.",
-        },
-        transition: {
-          title: "Transition to Independence",
-          desc: "From a first safe night to a key of one's own. Each step of the staircase is a stage of the journey — and the figure at the top stands tall on their own.",
-        },
+      // Six launchpad teams — colour matches each statue's emblem.
+      // `title` matches the destination page's heading (for the transition).
+      // `size` = the title's single-line font cap (measured per title) so every
+      // team heading is ONE line and the overlay matches each page exactly,
+      // keeping the View Transition morph pixel-stable.
+      const TEAMS = {
+        c1: { code: "C1", title: "The Cost of Inaction",           page: "pages/team-c1.html", color: "#e8506a", size: 54 },
+        c2: { code: "C2", title: "Housing First Navigator",       page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
+        c3: { code: "C3", title: "Resource Access Portal",        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
+        c4: { code: "C4", title: "Transition Mentorship Network", page: "pages/team-c4.html", color: "#e8a23a", size: 46 },
+        c5: { code: "C5", title: "Affordable Housing Design Lab", page: "pages/team-c5.html", color: "#9a6fd0", size: 47 },
+        c6: { code: "C6", title: "Peer Support Circle",           page: "pages/team-c6.html", color: "#e07840", size: 54 },
       };
-      const panel = document.getElementById("goal-panel");
-      const kicker = document.getElementById("goal-kicker");
-      const title = document.getElementById("goal-title");
-      const desc = document.getElementById("goal-desc");
-      const moreBtn = document.getElementById("goal-more");
-      document.getElementById("goal-close").addEventListener("click", () => {
-        panel.hidden = true;
-        // Pull the camera back a bit and hand control back to free roam
-        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "back" } }));
+      // Left rail — Section C Management portfolio links
+      const SECTION = [
+        { label: "Meet the Team", href: "pages/01-title.html" },
+        { label: "Introduction",  href: "pages/03-introduction.html" },
+        { label: "The Challenge", href: "pages/05-challenge.html" },
+        { label: "Our Partners",  href: "pages/04-partners.html" },
+        { label: "Birds-Eye View", overview: true },
+        { label: "Reflection",    href: "pages/08-reflections.html" },
+      ];
+
+      const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
+      let navigating = false;   // guard against a second click mid-transition
+      const pt = document.getElementById("pt");
+      const ptTitle = document.getElementById("pt-title");
+      const ptBadge = document.getElementById("pt-badge");
+      const mToggle = document.getElementById("m-toggle");
+      const mPanel = document.getElementById("m-panel");
+      const closeMobile = () => { mPanel.hidden = true; mToggle.setAttribute("aria-expanded", "false"); };
+
+      // --- navigation actions -------------------------------------------
+      function birdsEye() {
+        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "overview" } }));
+      }
+      function goPage(href) {
+        if (navigating) return;
+        navigating = true;
+        // The browser's cross-document View Transition cross-fades into the page.
+        window.location.href = href;
+      }
+      function goTeam(id) {
+        const t = TEAMS[id];
+        if (!t) return;
+        if (isMobile()) { window.location.href = t.page; return; }  // no effects on mobile
+        if (navigating) return;
+        navigating = true;
+        // 1) zoom the camera onto the statue
+        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: id } }));
+        // 2) the team's heading block (kicker + badge + title) appears over the scene
+        ptBadge.textContent = t.code;
+        ptTitle.textContent = t.title;
+        // single-line cap, identical to the destination page → stable morph
+        ptTitle.style.fontSize = "clamp(30px, 6vw, " + t.size + "px)";
+        pt.classList.add("active");
+        requestAnimationFrame(() => pt.classList.add("titling"));
+        // 3) heading slides to its final page position (transform is 1.0s)
+        setTimeout(() => pt.classList.add("wipe"), 900);
+        // 4) navigate ONLY after the slide has fully settled (900 + 1000 +
+        //    margin) — otherwise the transition captures the heading mid-slide
+        //    and the morph snaps the last few px (the jitter). Then the View
+        //    Transition morphs this settled heading into the page's heading.
+        setTimeout(() => { window.location.href = t.page; }, 2150);
+      }
+
+      // --- pill builder -------------------------------------------------
+      function makePill(label, opts) {
+        const a = document.createElement("a");
+        a.className = "pill";
+        a.href = opts.href || "#";
+        if (opts.dot) {
+          const d = document.createElement("span");
+          d.className = "dot";
+          d.style.background = opts.dot;
+          a.appendChild(d);
+        }
+        a.appendChild(document.createTextNode(label));
+        a.addEventListener("click", (e) => { e.preventDefault(); opts.onClick(); closeMobile(); });
+        return a;
+      }
+      const sectionAction = (s) => (s.overview ? birdsEye : () => goPage(s.href));
+      const teamPillLabel = (id) => TEAMS[id].code + " · " + TEAMS[id].title;
+
+      // Left + right desktop rails
+      const railL = document.getElementById("rail-left");
+      SECTION.forEach((s) => railL.appendChild(makePill(s.label, { href: s.href, onClick: sectionAction(s) })));
+      const railR = document.getElementById("rail-right");
+      Object.keys(TEAMS).forEach((id) =>
+        railR.appendChild(makePill(teamPillLabel(id), { dot: TEAMS[id].color, href: TEAMS[id].page, onClick: () => goTeam(id) }))
+      );
+
+      // Mobile panel — both groups, labelled
+      function mobileLabel(text) { const s = document.createElement("span"); s.className = "rail-label"; s.textContent = text; return s; }
+      mPanel.appendChild(mobileLabel("LAUNCHPAD TEAMS"));
+      Object.keys(TEAMS).forEach((id) =>
+        mPanel.appendChild(makePill(teamPillLabel(id), { dot: TEAMS[id].color, href: TEAMS[id].page, onClick: () => goTeam(id) }))
+      );
+      mPanel.appendChild(mobileLabel("SECTION C MANAGEMENT"));
+      SECTION.forEach((s) => mPanel.appendChild(makePill(s.label, { href: s.href, onClick: sectionAction(s) })));
+
+      mToggle.addEventListener("click", () => {
+        const open = mPanel.hidden;
+        mPanel.hidden = !open;
+        mToggle.setAttribute("aria-expanded", String(open));
       });
 
-      function showGoalCard(name) {
-        const goal = GOALS[name];
-        if (!goal) return;
-        kicker.textContent = "PROJECT GOAL";
-        title.textContent = goal.title;
-        desc.textContent = goal.desc;
-        moreBtn.textContent = "SEE THE PROJECT";
-        moreBtn.href = "#";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      const teamBtn = document.getElementById("goal-team");
-
-      function showAboutCard() {
-        kicker.textContent = "ABOUT";
-        title.textContent = "C4 Capstone";
-        desc.textContent =
-          "C4 is a student capstone exploring homelessness through a living miniature city. " +
-          "Four monuments inside the city mark our goals — built by our teams together with " +
-          "faculty and community partners.";
-        teamBtn.textContent = "MEET THE TEAM";
-        teamBtn.href = "pages/01-title.html";
-        moreBtn.textContent = "PORTFOLIO";
-        moreBtn.href = "pages/02-contents.html";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      function showTeamsCard() {
-        kicker.textContent = "TEAMS";
-        title.textContent = "Our Teams";
-        desc.textContent =
-          "The management team and the launchpad teams who built C4 — collaborators across " +
-          "disciplines, working with faculty and program mentors to bring the project to life.";
-        teamBtn.textContent = "MEET THE TEAMS";
-        teamBtn.href = "pages/team-c1.html";
-        moreBtn.textContent = "INTRODUCTION";
-        moreBtn.href = "pages/03-introduction.html";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      function showPartnersCard() {
-        kicker.textContent = "PARTNERS";
-        title.textContent = "Partners & Organizations";
-        desc.textContent =
-          "Seven York Region organizations who brought the work out of the classroom and into " +
-          "the community — providing access, expertise, and the honest friction that makes solutions real.";
-        teamBtn.textContent = "VIEW PARTNERS";
-        teamBtn.href = "pages/04-partners.html";
-        moreBtn.textContent = "PORTFOLIO";
-        moreBtn.href = "pages/02-contents.html";
-        moreBtn.removeAttribute("target");
-        panel.hidden = false;
-      }
-
-      // Clicking a statue (or its arrow) in the 3D scene opens its card
-      // (the scene dispatches c4-goal and flies the camera itself)
-      window.addEventListener("c4-goal", (e) => {
-        const name = e.detail && e.detail.name;
-        if (name === "teams") showTeamsCard();
-        else if (name === "partners") showPartnersCard();
-        else showAboutCard();   // "c4"
-      });
+      // Clicking a team statue (or its arrow) in the 3D scene → same flow
+      window.addEventListener("c4-goal", (e) => goTeam(e.detail && e.detail.name));
     })();
   </script>
 
-  <script type="module" src="js/main.js?v=4"></script>
+  <script type="module" src="js/main.js?v=12"></script>
 </body>
 </html>
