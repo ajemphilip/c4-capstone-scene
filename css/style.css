@@ -285,21 +285,22 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
    v3 — pill rails, mobile menu, cinematic page transition
    ========================================================= */
 
-/* Cross-document View Transitions — the city opts in too, so the team
-   heading shown over the scene MORPHS into the destination page's heading
-   (same view-transition-name) instead of the page reloading it. */
-@view-transition { navigation: auto; }
-/* Heading morphs in place; the scene/page background appears slowly on a
-   symmetric beat (the outgoing layer governs the reveal rate). */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 1.1s;
-  animation-timing-function: ease-in-out;
+/* City page transition (cross-browser, no View Transitions API). A paper
+   cover fades the whole city in on arrival and out before leaving; the
+   team heading overlay (#pt) sits above it, so the heading carries over to
+   the destination page seamlessly. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: #f7f4ec;
+  opacity: 1;                 /* covers on first paint */
+  pointer-events: none;
+  transition: opacity 0.9s ease;
 }
-::view-transition-group(page-title),
-::view-transition-group(page-kicker),
-::view-transition-group(page-badge) { animation-duration: 0.7s; }
-@media (max-width: 760px) { @view-transition { navigation: none; } }
+body.revealed::after { opacity: 0; }   /* fade the scene in */
+body.leaving::after  { opacity: 1; }   /* fade to paper before navigating */
 
 /* Fixed brand */
 .brand-fixed {
@@ -354,7 +355,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .page-transition {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 70;            /* heading overlay sits ABOVE the paper cover (z65) */
   pointer-events: none;
   visibility: hidden;
 }
@@ -418,13 +419,6 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .page-transition.titling .pt-title { opacity: 1; }
 .page-transition.wipe .pt-title { text-shadow: none; }
 
-/* Shared-element names — must match the destination page's heading so the
-   browser morphs (rather than reloads) them across the navigation. Only
-   captured while the overlay is .active (visible); hidden at rest. */
-.page-transition.active .pt-kicker { view-transition-name: page-kicker; }
-.page-transition.active .pt-badge  { view-transition-name: page-badge;  }
-.page-transition.active .pt-title  { view-transition-name: page-title;  }
-
 /* ---------- Mobile: drop rails + effects, single top-right menu ---------- */
 @media (max-width: 760px) {
   .side-rail { display: none; }
@@ -477,6 +471,4 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
     letter-spacing: 0.22em;
   }
 
-  /* no cinematic transition on mobile */
-  .page-transition { display: none !important; }
 }

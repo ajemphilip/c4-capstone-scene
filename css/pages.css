@@ -144,34 +144,38 @@ h1 {
 }
 
 /* =========================================================
-   Site-wide page transition — native cross-document View Transitions.
-   The heading (kicker / badge / h1) is tagged as a shared element, so
-   the browser MORPHS it across the navigation instead of re-rendering
-   it — the text simply stays in place while the rest of the page
-   cross-fades. No reload flash, no JS.  (Chrome/Edge; degrades to an
-   instant navigation elsewhere.)
+   Site-wide page transition — works in EVERY browser (plain CSS/JS, no
+   View Transitions API). A paper cover fades the page body in on arrival
+   and out before leaving, while the heading is lifted ABOVE the cover —
+   so the kicker / badge / title stay put and the rest of the page crosses
+   over beneath them. Because every page shares the heading layout, the
+   heading visibly persists (transfers) across navigations.
    ========================================================= */
-@view-transition { navigation: auto; }
-
-h1          { view-transition-name: page-title;  }
-.kicker     { view-transition-name: page-kicker; }
-.team-badge { view-transition-name: page-badge;  }
-
-/* The heading holds in place; the background (everything in :root) appears
-   slowly. The OUTGOING layer governs the reveal rate (the live page sits
-   behind it), so both sides fade on the same slow, symmetric beat. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 1.1s;
-  animation-timing-function: ease-in-out;
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--paper, #f7f4ec);
+  opacity: 1;                 /* covers on first paint — no flash */
+  pointer-events: none;
+  transition: opacity 0.7s ease;
 }
-::view-transition-group(page-title),
-::view-transition-group(page-kicker),
-::view-transition-group(page-badge) { animation-duration: 0.7s; }
+body.revealed::after { opacity: 0; }   /* fade the page body in */
+body.leaving::after  { opacity: 1; }   /* fade it back out before navigating */
 
-/* Mobile: drop the effect — instant navigation. */
-@media (max-width: 760px)               { @view-transition { navigation: none; } }
-@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+/* The shared heading sits above the cover, so it never fades — it holds
+   in place while the rest of the page crosses over. */
+main > h1,
+main > .kicker,
+main > .team-badge {
+  position: relative;
+  z-index: 60;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after { transition: opacity 0.01s linear; }
+}
 
 /* =========================================================
    Team portfolio pages
@@ -299,6 +303,24 @@ details.nav-details .page-dropdown a.active {
 .sdg-11 { background: #fd9d24; color: #000; }
 .sdg-16 { background: #00689d; }
 .sdg-17 { background: #19486a; }
+.sdg-2  { background: #dda63a; color: #000; }
+.sdg-4  { background: #c5192d; }
+.sdg-8  { background: #a21942; }
+
+/* Spacing between stacked paragraphs inside a section */
+.item p + p { margin-top: 14px; }
+
+/* e-Portfolio section group divider (The Project / The Journey / The Legacy) */
+.group-head {
+  margin: 58px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.4);
+}
+/* Report / poster links row under the lede */
+.doc-links { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 36px; }
 
 /* Team members grid */
 .team-grid {
