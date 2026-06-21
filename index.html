@@ -78,12 +78,12 @@
       // team heading is ONE line and the overlay matches each page exactly,
       // keeping the View Transition morph pixel-stable.
       const TEAMS = {
-        c1: { code: "C1", title: "The Cost of Inaction",           page: "pages/team-c1.html", color: "#e8506a", size: 54 },
-        c2: { code: "C2", title: "Housing First Navigator",       page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
-        c3: { code: "C3", title: "Resource Access Portal",        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
-        c4: { code: "C4", title: "Transition Mentorship Network", page: "pages/team-c4.html", color: "#e8a23a", size: 46 },
-        c5: { code: "C5", title: "Affordable Housing Design Lab", page: "pages/team-c5.html", color: "#9a6fd0", size: 47 },
-        c6: { code: "C6", title: "Peer Support Circle",           page: "pages/team-c6.html", color: "#e07840", size: 54 },
+        c1: { code: "C1", title: "The Cost of Inaction",          page: "pages/team-c1.html", color: "#e8506a", size: 54 },
+        c2: { code: "C2", title: "You(th) Are Here",       page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
+        c3: { code: "C3", title: "You Belong",        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
+        c4: { code: "C4", title: "Youth Community Connection Fund", page: "pages/team-c4.html", color: "#e8a23a", size: 46 },
+        c5: { code: "C5", title: "Your Third Space", page: "pages/team-c5.html", color: "#9a6fd0", size: 47 },
+        c6: { code: "C6", title: "PartnerPath",           page: "pages/team-c6.html", color: "#e07840", size: 54 },
       };
       // Left rail — Section C Management portfolio links
       const SECTION = [
@@ -185,5 +185,115 @@
   </script>
 
   <script type="module" src="js/main.js?v=12"></script>
+
+  <button
+    id="full-report-btn"
+    style="position:fixed;bottom:28px;right:28px;z-index:9999;cursor:pointer;
+           padding:9px 18px;font-size:11px;font-weight:600;letter-spacing:0.22em;
+           color:#000;border:1px solid rgba(0,0,0,0.3);border-radius:999px;
+           background:rgba(255,255,255,0.6);backdrop-filter:blur(8px);
+           -webkit-backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,0.18);
+           font-family:Poppins,sans-serif;transition:background 0.2s,color 0.2s;"
+    onmouseover="this.style.background='#000';this.style.color='#fff'"
+    onmouseout="if(!this.disabled){this.style.background='rgba(255,255,255,0.6)';this.style.color='#000';}"
+  >DOWNLOAD PDF ↓</button>
+
+  <script>
+    document.getElementById("full-report-btn").addEventListener("click", async function () {
+      const btn = this;
+      btn.textContent = "PREPARING…";
+      btn.disabled = true;
+      btn.style.opacity = "0.6";
+      btn.style.cursor = "wait";
+
+      const base = window.location.origin + window.location.pathname.replace(/[^/]+$/, "").replace(/\/$/, "");
+      const pageList = [
+        "pages/01-title.html", "pages/02-contents.html", "pages/03-introduction.html",
+        "pages/04-partners.html", "pages/05-challenge.html", "pages/06-synthesis.html",
+        "pages/07-outcomes.html", "pages/08-reflections.html", "pages/09-legacy.html",
+        "pages/10-conclusion.html",
+        "pages/team-c1.html", "pages/team-c2.html", "pages/team-c3.html",
+        "pages/team-c4.html", "pages/team-c5.html", "pages/team-c6.html",
+      ];
+
+      try {
+        const htmls = await Promise.all(
+          pageList.map((p) => fetch(base + "/" + p).then((r) => r.text()))
+        );
+
+        const parser = new DOMParser();
+        const sections = htmls.map((html, i) => {
+          const doc = parser.parseFromString(html, "text/html");
+          const pageBase = base + "/" + pageList[i].replace(/[^/]+$/, "");
+
+          // Resolve relative asset paths so images/links work in the print window
+          doc.querySelectorAll("img[src]").forEach((el) => {
+            const src = el.getAttribute("src");
+            if (src && !src.startsWith("http") && !src.startsWith("//")) {
+              el.setAttribute("src", pageBase + src);
+            }
+          });
+          doc.querySelectorAll("a[href]").forEach((el) => {
+            const href = el.getAttribute("href");
+            if (href && !href.startsWith("http") && !href.startsWith("#") && !href.startsWith("//")) {
+              el.setAttribute("href", pageBase + href);
+            }
+          });
+
+          // Strip page-nav prev/next arrows (not meaningful in a combined doc)
+          doc.querySelectorAll(".page-nav").forEach((el) => el.remove());
+
+          return doc.querySelector("main")?.outerHTML || "";
+        });
+
+        const win = window.open("", "_blank");
+        if (!win) {
+          alert("Pop-up blocked by your browser.\nPlease allow pop-ups for this site and try again.\n\n(This works automatically on GitHub Pages — pop-up blockers are stricter inside preview iframes.)");
+          return;
+        }
+        win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>C4 Capstone — Complete Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="${base}/css/pages.css">
+  <style>
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { max-width: 820px; margin: 0 auto; padding: 40px 32px; background: #f7f4ec; }
+    .report-section { page-break-after: always; padding-bottom: 48px; margin-bottom: 48px; border-bottom: 2px solid #ddd; }
+    .report-section:last-child { page-break-after: auto; border-bottom: none; }
+    .report-section main { max-width: 100%; padding: 0; margin: 0; }
+    .page-nav { display: none !important; }
+    .pdf-fab  { display: none !important; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .report-section { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  ${sections.map((s) => `<div class="report-section">${s}</div>`).join("\n")}
+  <script>
+    window.addEventListener("load", function () {
+      // Brief pause so fonts + images settle before the print dialog opens
+      setTimeout(function () { window.print(); }, 800);
+    });
+  <\/script>
+</body>
+</html>`);
+        win.document.close();
+      } catch (err) {
+        console.error("[C4] Full report failed", err);
+        alert("Could not generate the report: " + err.message);
+      } finally {
+        btn.textContent = "DOWNLOAD PDF ↓";
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+      }
+    });
+  </script>
 </body>
 </html>
