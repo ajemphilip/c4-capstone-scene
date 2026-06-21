@@ -100,7 +100,6 @@ h1 {
   margin: 0;
   font-size: 14px;
   color: rgba(0, 0, 0, 0.6);
-  max-width: 60ch;
 }
 .placeholder {
   display: inline-block;
@@ -141,6 +140,13 @@ h1 {
   justify-content: space-between;
   margin-top: 60px;
   flex-wrap: wrap;
+}
+
+.doc-links {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 4px 0 36px;
 }
 
 /* =========================================================
@@ -268,17 +274,17 @@ details.nav-details .page-dropdown a.active {
   margin-bottom: 40px;
   overflow: hidden;
 }
-.team-photo img {
+.team-photo-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.team-photo-placeholder img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 16px;
-}
-.team-photo-placeholder {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.28em;
-  color: rgba(0, 0, 0, 0.28);
 }
 
 /* SDG goal badges */
@@ -297,15 +303,26 @@ details.nav-details .page-dropdown a.active {
   letter-spacing: 0.08em;
   color: #fff;
 }
-.sdg-1  { background: #e5243b; }
-.sdg-3  { background: #4c9f38; }
-.sdg-10 { background: #dd1367; }
+/* Dark Backgrounds: Require White Text (#fff) */
+.sdg-1 { background: #e5243b; color: #fff; }
+.sdg-3 { background: #4c9f38; color: #fff; }
+.sdg-4 { background: #c5192d; color: #fff; }
+.sdg-5 { background: #ff3a21; color: #fff; }
+.sdg-8 { background: #a21942; color: #fff; }
+.sdg-9 { background: #fd6925; color: #fff; }
+.sdg-10 { background: #dd1367; color: #fff; }
+.sdg-12 { background: #bf8b2e; color: #fff; }
+.sdg-13 { background: #3f7e44; color: #fff; }
+.sdg-14 { background: #0a97d9; color: #fff; }
+.sdg-16 { background: #00689d; color: #fff; }
+.sdg-17 { background: #19486a; color: #fff; }
+
+/* Light/Bright Backgrounds: Require Black Text (#000) */
+.sdg-2 { background: #dda63a; color: #000; }
+.sdg-6 { background: #26bde2; color: #000; }
+.sdg-7 { background: #fcc30b; color: #000; }
 .sdg-11 { background: #fd9d24; color: #000; }
-.sdg-16 { background: #00689d; }
-.sdg-17 { background: #19486a; }
-.sdg-2  { background: #dda63a; color: #000; }
-.sdg-4  { background: #c5192d; }
-.sdg-8  { background: #a21942; }
+.sdg-15 { background: #56c02b; color: #000; }
 
 /* Spacing between stacked paragraphs inside a section */
 .item p + p { margin-top: 14px; }
@@ -442,13 +459,22 @@ details.nav-details .page-dropdown a.active {
   justify-content: center;
   text-align: center;
   padding: 16px;
+  overflow: hidden;
 }
 .partner-img-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  color: rgba(0,0,0,0.28);
-  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.partner-img-label img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 .partner-text { flex: 1; }
 .partner-num {
@@ -572,4 +598,89 @@ details.nav-details .page-dropdown a.active {
   .partner-img { flex: none; width: 100%; aspect-ratio: 16 / 7; }
   .ssc-grid { grid-template-columns: 1fr; }
   .stat-block { flex: 1 1 110px; }
+}
+
+/* =========================================================
+   PDF download — floating action button
+   ========================================================= */
+.pdf-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.pdf-fab:hover { background: #000; color: #fff; }
+
+/* =========================================================
+   Print / PDF output
+   =========================================================
+   Strips all navigation chrome and the FAB. Keeps all content.
+   External link URLs are printed after the anchor text so
+   report PDFs and partner sites remain reachable.
+   ========================================================= */
+@media print {
+  .page-chrome,
+  .page-nav,
+  .pdf-fab {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    line-height: 1.65;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  h1  { font-size: 26pt; margin-top: 0; }
+  h2  { font-size: 14pt; }
+  .lede { font-size: 12pt; }
+
+  .kicker,
+  .team-badge {
+    display: block;
+  }
+
+  /* Preserve all background colours — SDG badges, stat blocks, etc. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Show full URL after every link — critical for reports, posters, partner sites */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #555;
+    word-break: break-all;
+    font-weight: 400;
+  }
+  /* Suppress URL echo for pure-hash anchors */
+  a[href="#"]::after { content: none; }
+
+  .partner-row  { page-break-inside: avoid; }
+  .item         { page-break-inside: avoid; }
+
+  .team-photo {
+    border: 1px solid #ccc !important;
+    background: #f0f0f0 !important;
+  }
+
+  /* Partner logo box: let image breathe on paper */
+  .partner-img {
+    border: 1px solid #ccc !important;
+    background: #fff !important;
+  }
 }
