@@ -319,11 +319,11 @@ const SCULPT_SCALE = 1.8;   // bigger than the original 1.6, but small enough
    reads clearly and none sits in the Food Bank / Shelter footprint. */
 const TEAMS = [
   { id: "c1", code: "C1", name: "THE COST OF INACTION",       page: "pages/team-c1.html", color: "#e8506a", shape: "ico",    blurb: "A data-driven campaign on the social and economic cost of inaction on homelessness." },
-  { id: "c2", code: "C2", name: "HOUSING FIRST NAVIGATOR",    page: "pages/team-c2.html", color: "#4a90d9", shape: "knot",   blurb: "Guiding people to stable housing first — then building support around it." },
-  { id: "c3", code: "C3", name: "RESOURCE ACCESS PORTAL",     page: "pages/team-c3.html", color: "#3aa88a", shape: "octa",   blurb: "Making local services visible, searchable and reachable for people in need." },
-  { id: "c4", code: "C4", name: "TRANSITION MENTORSHIP NETWORK", page: "pages/team-c4.html", color: "#e8a23a", shape: "dodec",  blurb: "Pairing people leaving homelessness with mentors for the road to independence." },
-  { id: "c5", code: "C5", name: "AFFORDABLE HOUSING DESIGN LAB", page: "pages/team-c5.html", color: "#9a6fd0", shape: "torus",  blurb: "Designing housing models people can actually afford to live in." },
-  { id: "c6", code: "C6", name: "PEER SUPPORT CIRCLE",        page: "pages/team-c6.html", color: "#e07840", shape: "sphere", blurb: "Connection and recovery through people with shared lived experience." },
+  { id: "c2", code: "C2", name: "YOU(TH) ARE HERE",    page: "pages/team-c2.html", color: "#4a90d9", shape: "knot",   blurb: "A redesigned, accessible information package helping youth navigate shelter services." },
+  { id: "c3", code: "C3", name: "YOU BELONG",     page: "pages/team-c3.html", color: "#3aa88a", shape: "octa",   blurb: "Challenging stigma and giving partners a shared space to coordinate." },
+  { id: "c4", code: "C4", name: "YOUTH COMMUNITY CONNECTION FUND", page: "pages/team-c4.html", color: "#e8a23a", shape: "dodec",  blurb: "A flexible fund connecting youth to sports, arts, and community activities." },
+  { id: "c5", code: "C5", name: "YOUR THIRD SPACE", page: "pages/team-c5.html", color: "#9a6fd0", shape: "torus",  blurb: "A digital + community platform helping youth transition to independent living." },
+  { id: "c6", code: "C6", name: "PARTNERPATH",        page: "pages/team-c6.html", color: "#e07840", shape: "sphere", blurb: "A provider collaboration hub that connects Ontario's homelessness services." },
 ];
 /* Place the six statues ON THE CITY EDGES — distributed around the inner
    perimeter of the loop road, kept clear of the civic buildings (Food Bank /

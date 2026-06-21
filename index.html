@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=17" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
 
   <script type="importmap">
   {
@@ -78,12 +78,12 @@
       // team heading is ONE line and the overlay matches each page exactly,
       // keeping the View Transition morph pixel-stable.
       const TEAMS = {
-        c1: { code: "C1", title: "The Cost of Inaction",          page: "pages/team-c1.html", color: "#e8506a", size: 54 },
-        c2: { code: "C2", title: "You(th) Are Here",       page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
-        c3: { code: "C3", title: "You Belong",        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
-        c4: { code: "C4", title: "Youth Community Connection Fund", page: "pages/team-c4.html", color: "#e8a23a", size: 46 },
-        c5: { code: "C5", title: "Your Third Space", page: "pages/team-c5.html", color: "#9a6fd0", size: 47 },
-        c6: { code: "C6", title: "PartnerPath",           page: "pages/team-c6.html", color: "#e07840", size: 54 },
+        c1: { code: "C1", title: "The Cost of Inaction",           page: "pages/team-c1.html", color: "#e8506a", size: 54 },
+        c2: { code: "C2", title: "You(th) Are Here",               page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
+        c3: { code: "C3", title: "You Belong"           ,        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
+        c4: { code: "C4", title: "Youth Community Connection Fund", page: "pages/team-c4.html", color: "#e8a23a", size: 40 },
+        c5: { code: "C5", title: "Your Third Space",                page: "pages/team-c5.html", color: "#9a6fd0", size: 54 },
+        c6: { code: "C6", title: "PartnerPath"             ,           page: "pages/team-c6.html", color: "#e07840", size: 54 },
       };
       // Left rail — Section C Management portfolio links
       const SECTION = [
@@ -111,13 +111,12 @@
       function goPage(href) {
         if (navigating) return;
         navigating = true;
-        // The browser's cross-document View Transition cross-fades into the page.
-        window.location.href = href;
+        document.body.classList.add("leaving");   // fade the city to paper
+        setTimeout(() => { window.location.href = href; }, 950);
       }
       function goTeam(id) {
         const t = TEAMS[id];
         if (!t) return;
-        if (isMobile()) { window.location.href = t.page; return; }  // no effects on mobile
         if (navigating) return;
         navigating = true;
         // 1) zoom the camera onto the statue
@@ -129,12 +128,12 @@
         ptTitle.style.fontSize = "clamp(30px, 6vw, " + t.size + "px)";
         pt.classList.add("active");
         requestAnimationFrame(() => pt.classList.add("titling"));
-        // 3) heading slides to its final page position (transform is 1.0s)
-        setTimeout(() => pt.classList.add("wipe"), 900);
-        // 4) navigate ONLY after the slide has fully settled (900 + 1000 +
-        //    margin) — otherwise the transition captures the heading mid-slide
-        //    and the morph snaps the last few px (the jitter). Then the View
-        //    Transition morphs this settled heading into the page's heading.
+        // 3) heading slides to its final page position, and the paper cover
+        //    fades up over the scene BEHIND it (heading stays above, z70 > z65)
+        setTimeout(() => { pt.classList.add("wipe"); document.body.classList.add("leaving"); }, 900);
+        // 4) navigate once the slide + cover have settled. The destination
+        //    page shows the same heading at the same spot above its own paper
+        //    cover, so the heading carries straight over — every browser.
         setTimeout(() => { window.location.href = t.page; }, 2150);
       }
 
@@ -154,7 +153,7 @@
         return a;
       }
       const sectionAction = (s) => (s.overview ? birdsEye : () => goPage(s.href));
-      const teamPillLabel = (id) => TEAMS[id].code + " · " + TEAMS[id].title;
+      const teamPillLabel = (id) => TEAMS[id].code + " - " + TEAMS[id].title;
 
       // Left + right desktop rails
       const railL = document.getElementById("rail-left");
@@ -181,6 +180,11 @@
 
       // Clicking a team statue (or its arrow) in the 3D scene → same flow
       window.addEventListener("c4-goal", (e) => goTeam(e.detail && e.detail.name));
+
+      // Reveal the city from the paper cover on arrival (continues the wipe
+      // from a portfolio page → seamless heading hand-off, every browser).
+      requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("revealed")));
+      window.addEventListener("pageshow", (e) => { if (e.persisted) document.body.classList.add("revealed"); });
     })();
   </script>
 
@@ -295,5 +299,6 @@
       }
     });
   </script>
+  <script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>
