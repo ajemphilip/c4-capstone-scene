@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 
   <script type="importmap">
   {
@@ -44,8 +44,8 @@
   <a class="brand-fixed" href="#">C4<sup>®</sup></a>
 
   <!-- LEFT rail: Section C Management portfolio links -->
-  <nav class="side-rail left" id="rail-left" aria-label="Section C Management">
-    <span class="rail-label">SECTION C MANAGEMENT</span>
+  <nav class="side-rail left" id="rail-left" aria-label="Portfolio">
+    <span class="rail-label">PORTFOLIO</span>
   </nav>
 
   <!-- RIGHT rail: the six launchpad teams -->
@@ -86,13 +86,18 @@
         c6: { code: "C6", title: "PartnerPath"             ,           page: "pages/team-c6.html", color: "#e07840", size: 54 },
       };
       // Left rail — Section C Management portfolio links
+      // Portfolio links — mirrors the PORTFOLIO dropdown on the pages.
       const SECTION = [
-        { label: "Meet the Team", href: "pages/01-title.html" },
-        { label: "Introduction",  href: "pages/03-introduction.html" },
-        { label: "The Challenge", href: "pages/05-challenge.html" },
-        { label: "Our Partners",  href: "pages/04-partners.html" },
-        { label: "Birds-Eye View", overview: true },
-        { label: "Reflection",    href: "pages/08-reflections.html" },
+        { label: "01 · Meet the Team",           href: "pages/01-title.html" },
+        { label: "02 · Table of Contents",       href: "pages/02-contents.html" },
+        { label: "03 · About the Program",       href: "pages/03-introduction.html" },
+        { label: "04 · Project Partners",        href: "pages/04-partners.html" },
+        { label: "05 · Challenge & Themes",      href: "pages/05-challenge.html" },
+        { label: "06 · Cross-Project Synthesis", href: "pages/06-synthesis.html" },
+        { label: "07 · Outcomes & Insights",     href: "pages/07-outcomes.html" },
+        { label: "08 · Journey Reflections",     href: "pages/08-reflections.html" },
+        { label: "09 · Legacy & Future",         href: "pages/09-legacy.html" },
+        { label: "10 · Conclusion",              href: "pages/10-conclusion.html" },
       ];
 
       const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
@@ -169,7 +174,7 @@
       Object.keys(TEAMS).forEach((id) =>
         mPanel.appendChild(makePill(teamPillLabel(id), { dot: TEAMS[id].color, href: TEAMS[id].page, onClick: () => goTeam(id) }))
       );
-      mPanel.appendChild(mobileLabel("SECTION C MANAGEMENT"));
+      mPanel.appendChild(mobileLabel("PORTFOLIO"));
       SECTION.forEach((s) => mPanel.appendChild(makePill(s.label, { href: s.href, onClick: sectionAction(s) })));
 
       mToggle.addEventListener("click", () => {
@@ -250,44 +255,44 @@
           return doc.querySelector("main")?.outerHTML || "";
         });
 
-        const win = window.open("", "_blank");
-        if (!win) {
-          alert("Pop-up blocked by your browser.\nPlease allow pop-ups for this site and try again.\n\n(This works automatically on GitHub Pages — pop-up blockers are stricter inside preview iframes.)");
-          return;
-        }
-        win.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>C4 Capstone — Complete Report</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="${base}/css/pages.css">
-  <style>
-    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { max-width: 820px; margin: 0 auto; padding: 40px 32px; background: #f7f4ec; }
-    .report-section { page-break-after: always; padding-bottom: 48px; margin-bottom: 48px; border-bottom: 2px solid #ddd; }
-    .report-section:last-child { page-break-after: auto; border-bottom: none; }
-    .report-section main { max-width: 100%; padding: 0; margin: 0; }
-    .page-nav { display: none !important; }
-    .pdf-fab  { display: none !important; }
-    @media print {
-      body { background: #fff; padding: 0; }
-      .report-section { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    }
-  </style>
-</head>
-<body>
-  ${sections.map((s) => `<div class="report-section">${s}</div>`).join("\n")}
-  <script>
-    window.addEventListener("load", function () {
-      // Brief pause so fonts + images settle before the print dialog opens
-      setTimeout(function () { window.print(); }, 800);
-    });
-  <\/script>
-</body>
-</html>`);
-        win.document.close();
+        const reportHtml = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>C4 Capstone — Complete Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="${base}/css/pages.css?v=10">
+<style>
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { max-width: 820px; margin: 0 auto; padding: 40px 32px; background: #f7f4ec; }
+  .report-section { page-break-after: always; }
+  .report-section:last-child { page-break-after: auto; }
+  .report-section main { max-width: 100%; padding: 0; margin: 0; opacity: 1 !important; transform: none !important; }
+  .page-nav, .pdf-fab { display: none !important; }
+  @media print { body { background: #fff; padding: 0; } }
+</style></head><body>
+${sections.map((s) => `<div class="report-section">${s}</div>`).join("\n")}
+</body></html>`;
+
+        // Render into a hidden, same-page iframe and print THAT. A window.open
+        // pop-up was unreliable — blocked or blank inside preview iframes; an
+        // iframe prints everywhere (GitHub Pages, localhost, embedded previews).
+        const stale = document.getElementById("c4-report-frame");
+        if (stale) stale.remove();
+        const frame = document.createElement("iframe");
+        frame.id = "c4-report-frame";
+        frame.setAttribute("aria-hidden", "true");
+        frame.style.cssText = "position:fixed;left:-9999px;bottom:0;width:1px;height:1px;border:0;";
+        frame.srcdoc = reportHtml;
+        frame.onload = function () {
+          const w = frame.contentWindow;
+          const go = function () {
+            try { w.focus(); w.print(); } catch (e) { console.error("[C4] print failed", e); }
+          };
+          const fonts = (w.document.fonts && w.document.fonts.ready) || Promise.resolve();
+          Promise.resolve(fonts).then(function () { setTimeout(go, 250); }, function () { setTimeout(go, 250); });
+          w.onafterprint = function () { frame.remove(); };
+          setTimeout(function () { if (document.body.contains(frame)) frame.remove(); }, 120000);
+        };
+        document.body.appendChild(frame);
       } catch (err) {
         console.error("[C4] Full report failed", err);
         alert("Could not generate the report: " + err.message);

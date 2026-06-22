@@ -331,10 +331,11 @@ body.leaving::after  { opacity: 1; }   /* fade to paper before navigating */
    to the top — just padding from the edge, no gap. */
 .side-rail.right { right: 32px; top: 24px; align-items: flex-end; }
 .rail-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.3em;
-  color: rgba(0, 0, 0, 0.5);
+  color: #000;
+  text-shadow: 0 2px 14px rgba(255, 255, 255, 0.65), 0 0 3px rgba(255, 255, 255, 0.5);
   margin-bottom: 4px;
 }
 

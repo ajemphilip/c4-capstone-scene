@@ -631,6 +631,18 @@ details.nav-details .page-dropdown a.active {
     display: none !important;
   }
 
+  /* The scroll-reveal (GSAP) starts content blocks at opacity:0 until they
+     scroll into view. When printing / saving to PDF nothing scrolls, so force
+     every block visible — otherwise the PDF comes out blank below the hero.
+     (!important beats GSAP's inline opacity:0.) Also drop the page-transition
+     paper cover so it can't tint or hide the page. */
+  main > * {
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible !important;
+  }
+  body::after { display: none !important; }
+
   body {
     background: #fff !important;
     color: #000 !important;

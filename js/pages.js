@@ -101,6 +101,10 @@
     });
   }, 2500);
 
+  // Print / "Save as PDF": reveal every block first so nothing is captured
+  // mid-animation or still hidden (belt-and-suspenders with the @media print CSS).
+  window.addEventListener("beforeprint", () => gsap.set(blocks, { opacity: 1, y: 0 }));
+
   window.addEventListener("load", () => ScrollTrigger.refresh());
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => ScrollTrigger.refresh());
 })();
