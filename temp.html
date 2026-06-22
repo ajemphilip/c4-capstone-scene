@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="C4 Capstone — a quiet scene." />
+  <title>C4 Capstone</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.3.1",
+      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+      "react-dom": "https://esm.sh/react-dom@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+      "scheduler": "https://esm.sh/scheduler@0.23.2",
+      "three": "https://esm.sh/three@0.160.0",
+      "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+      "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.16.8?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0&external=react,react-dom,three,scheduler",
+      "@react-three/drei": "https://esm.sh/@react-three/drei@9.105.0?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0,@react-three/fiber@8.16.8&external=react,react-dom,three,@react-three/fiber",
+      "@react-three/cannon": "https://esm.sh/@react-three/cannon@6.6.0?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0,@react-three/fiber@8.16.8&external=react,react-dom,three,@react-three/fiber",
+      "@react-three/postprocessing": "https://esm.sh/@react-three/postprocessing@2.16.2?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0,@react-three/fiber@8.16.8&external=react,react-dom,three,@react-three/fiber",
+      "postprocessing": "https://esm.sh/postprocessing@6.36.0?deps=three@0.160.0&external=three",
+      "htm": "https://esm.sh/htm@3.1.1"
+    }
+  }
+  </script>
+  <script>
+    window.addEventListener("error", (e) => {
+      console.error("[C4]", e.message, e.error || "");
+    });
+  </script>
+</head>
+<body>
+  <!-- R3F mounts here, full-bleed -->
+  <div id="root"></div>
+
+  <!-- Brand -->
+  <a class="brand-fixed" href="#">C4<sup>®</sup></a>
+
+  <!-- LEFT rail: Section C Management portfolio links -->
+  <nav class="side-rail left" id="rail-left" aria-label="Section C Management">
+    <span class="rail-label">SECTION C MANAGEMENT</span>
+  </nav>
+
+  <!-- RIGHT rail: the six launchpad teams -->
+  <nav class="side-rail right" id="rail-right" aria-label="Launchpad Teams">
+    <span class="rail-label">LAUNCHPAD TEAMS</span>
+  </nav>
+
+  <!-- MOBILE: a single top-right menu -->
+  <div class="mobile-bar">
+    <button class="pill menu-toggle" id="m-toggle" aria-expanded="false">MENU</button>
+  </div>
+  <div class="mobile-panel" id="m-panel" hidden></div>
+
+  <!-- Cinematic page transition: the team's heading block appears, slides
+       to its page position, and a white wipe lands on the matching page. -->
+  <div class="page-transition" id="pt" aria-hidden="true">
+    <div class="pt-bg"></div>
+    <div class="pt-main">
+      <span class="pt-kicker">C4 LAUNCHPAD · TEAM PROJECT</span>
+      <div class="pt-badge" id="pt-badge"></div>
+      <h1 class="pt-title" id="pt-title"></h1>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      // Six launchpad teams — colour matches each statue's emblem.
+      // `title` matches the destination page's heading (for the transition).
+      // `size` = the title's single-line font cap (measured per title) so every
+      // team heading is ONE line and the overlay matches each page exactly,
+      // keeping the View Transition morph pixel-stable.
+      const TEAMS = {
+        c1: { code: "C1", title: "The Cost of Inaction",           page: "pages/team-c1.html", color: "#e8506a", size: 54 },
+        c2: { code: "C2", title: "You(th) Are Here",               page: "pages/team-c2.html", color: "#4a90d9", size: 54 },
+        c3: { code: "C3", title: "You Belong"           ,        page: "pages/team-c3.html", color: "#3aa88a", size: 54 },
+        c4: { code: "C4", title: "Youth Community Connection Fund", page: "pages/team-c4.html", color: "#e8a23a", size: 40 },
+        c5: { code: "C5", title: "Your Third Space",                page: "pages/team-c5.html", color: "#9a6fd0", size: 54 },
+        c6: { code: "C6", title: "PartnerPath"             ,           page: "pages/team-c6.html", color: "#e07840", size: 54 },
+      };
+      // Left rail — Section C Management portfolio links
+      const SECTION = [
+        { label: "Meet the Team", href: "pages/01-title.html" },
+        { label: "Introduction",  href: "pages/03-introduction.html" },
+        { label: "The Challenge", href: "pages/05-challenge.html" },
+        { label: "Our Partners",  href: "pages/04-partners.html" },
+        { label: "Birds-Eye View", overview: true },
+        { label: "Reflection",    href: "pages/08-reflections.html" },
+      ];
+
+      const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
+      let navigating = false;   // guard against a second click mid-transition
+      const pt = document.getElementById("pt");
+      const ptTitle = document.getElementById("pt-title");
+      const ptBadge = document.getElementById("pt-badge");
+      const mToggle = document.getElementById("m-toggle");
+      const mPanel = document.getElementById("m-panel");
+      const closeMobile = () => { mPanel.hidden = true; mToggle.setAttribute("aria-expanded", "false"); };
+
+      // --- navigation actions -------------------------------------------
+      function birdsEye() {
+        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: "overview" } }));
+      }
+      function goPage(href) {
+        if (navigating) return;
+        navigating = true;
+        document.body.classList.add("leaving");   // fade the city to paper
+        setTimeout(() => { window.location.href = href; }, 950);
+      }
+      function goTeam(id) {
+        const t = TEAMS[id];
+        if (!t) return;
+        if (navigating) return;
+        navigating = true;
+        // 1) zoom the camera onto the statue
+        window.dispatchEvent(new CustomEvent("c4-focus", { detail: { name: id } }));
+        // 2) the team's heading block (kicker + badge + title) appears over the scene
+        ptBadge.textContent = t.code;
+        ptTitle.textContent = t.title;
+        // single-line cap, identical to the destination page → stable morph
+        ptTitle.style.fontSize = "clamp(30px, 6vw, " + t.size + "px)";
+        pt.classList.add("active");
+        requestAnimationFrame(() => pt.classList.add("titling"));
+        // 3) heading slides to its final page position, and the paper cover
+        //    fades up over the scene BEHIND it (heading stays above, z70 > z65)
+        setTimeout(() => { pt.classList.add("wipe"); document.body.classList.add("leaving"); }, 900);
+        // 4) navigate once the slide + cover have settled. The destination
+        //    page shows the same heading at the same spot above its own paper
+        //    cover, so the heading carries straight over — every browser.
+        setTimeout(() => { window.location.href = t.page; }, 2150);
+      }
+
+      // --- pill builder -------------------------------------------------
+      function makePill(label, opts) {
+        const a = document.createElement("a");
+        a.className = "pill";
+        a.href = opts.href || "#";
+        if (opts.dot) {
+          const d = document.createElement("span");
+          d.className = "dot";
+          d.style.background = opts.dot;
+          a.appendChild(d);
+        }
+        a.appendChild(document.createTextNode(label));
+        a.addEventListener("click", (e) => { e.preventDefault(); opts.onClick(); closeMobile(); });
+        return a;
+      }
+      const sectionAction = (s) => (s.overview ? birdsEye : () => goPage(s.href));
+      const teamPillLabel = (id) => TEAMS[id].code + " - " + TEAMS[id].title;
+
+      // Left + right desktop rails
+      const railL = document.getElementById("rail-left");
+      SECTION.forEach((s) => railL.appendChild(makePill(s.label, { href: s.href, onClick: sectionAction(s) })));
+      const railR = document.getElementById("rail-right");
+      Object.keys(TEAMS).forEach((id) =>
+        railR.appendChild(makePill(teamPillLabel(id), { dot: TEAMS[id].color, href: TEAMS[id].page, onClick: () => goTeam(id) }))
+      );
+
+      // Mobile panel — both groups, labelled
+      function mobileLabel(text) { const s = document.createElement("span"); s.className = "rail-label"; s.textContent = text; return s; }
+      mPanel.appendChild(mobileLabel("LAUNCHPAD TEAMS"));
+      Object.keys(TEAMS).forEach((id) =>
+        mPanel.appendChild(makePill(teamPillLabel(id), { dot: TEAMS[id].color, href: TEAMS[id].page, onClick: () => goTeam(id) }))
+      );
+      mPanel.appendChild(mobileLabel("SECTION C MANAGEMENT"));
+      SECTION.forEach((s) => mPanel.appendChild(makePill(s.label, { href: s.href, onClick: sectionAction(s) })));
+
+      mToggle.addEventListener("click", () => {
+        const open = mPanel.hidden;
+        mPanel.hidden = !open;
+        mToggle.setAttribute("aria-expanded", String(open));
+      });
+
+      // Clicking a team statue (or its arrow) in the 3D scene → same flow
+      window.addEventListener("c4-goal", (e) => goTeam(e.detail && e.detail.name));
+
+      // Reveal the city from the paper cover on arrival (continues the wipe
+      // from a portfolio page → seamless heading hand-off, every browser).
+      requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("revealed")));
+      window.addEventListener("pageshow", (e) => { if (e.persisted) document.body.classList.add("revealed"); });
+    })();
+  </script>
+
+  <script type="module" src="js/main.js?v=12"></script>
+
+  <button
+    id="full-report-btn"
+    style="position:fixed;bottom:28px;right:28px;z-index:9999;cursor:pointer;
+           padding:9px 18px;font-size:11px;font-weight:600;letter-spacing:0.22em;
+           color:#000;border:1px solid rgba(0,0,0,0.3);border-radius:999px;
+           background:rgba(255,255,255,0.6);backdrop-filter:blur(8px);
+           -webkit-backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,0.18);
+           font-family:Poppins,sans-serif;transition:background 0.2s,color 0.2s;"
+    onmouseover="this.style.background='#000';this.style.color='#fff'"
+    onmouseout="if(!this.disabled){this.style.background='rgba(255,255,255,0.6)';this.style.color='#000';}"
+  >DOWNLOAD PDF ↓</button>
+
+  <script>
+    document.getElementById("full-report-btn").addEventListener("click", async function () {
+      const btn = this;
+      btn.textContent = "PREPARING…";
+      btn.disabled = true;
+      btn.style.opacity = "0.6";
+      btn.style.cursor = "wait";
+
+      const base = window.location.origin + window.location.pathname.replace(/[^/]+$/, "").replace(/\/$/, "");
+      const pageList = [
+        "pages/01-title.html", "pages/02-contents.html", "pages/03-introduction.html",
+        "pages/04-partners.html", "pages/05-challenge.html", "pages/06-synthesis.html",
+        "pages/07-outcomes.html", "pages/08-reflections.html", "pages/09-legacy.html",
+        "pages/10-conclusion.html",
+        "pages/team-c1.html", "pages/team-c2.html", "pages/team-c3.html",
+        "pages/team-c4.html", "pages/team-c5.html", "pages/team-c6.html",
+      ];
+
+      try {
+        const htmls = await Promise.all(
+          pageList.map((p) => fetch(base + "/" + p).then((r) => r.text()))
+        );
+
+        const parser = new DOMParser();
+        const sections = htmls.map((html, i) => {
+          const doc = parser.parseFromString(html, "text/html");
+          const pageBase = base + "/" + pageList[i].replace(/[^/]+$/, "");
+
+          // Resolve relative asset paths so images/links work in the print window
+          doc.querySelectorAll("img[src]").forEach((el) => {
+            const src = el.getAttribute("src");
+            if (src && !src.startsWith("http") && !src.startsWith("//")) {
+              el.setAttribute("src", pageBase + src);
+            }
+            // Force eager loading — lazy images won't load in a new window
+            el.setAttribute("loading", "eager");
+            el.removeAttribute("decoding");
+          });
+          doc.querySelectorAll("a[href]").forEach((el) => {
+            const href = el.getAttribute("href");
+            if (href && !href.startsWith("http") && !href.startsWith("#") && !href.startsWith("//")) {
+              el.setAttribute("href", pageBase + href);
+            }
+          });
+
+          // Strip page-nav, scripts, and view-transition names (cause conflicts
+          // when the same name appears on multiple elements in one document)
+          doc.querySelectorAll(".page-nav, script").forEach((el) => el.remove());
+          doc.querySelectorAll("[style*='view-transition']").forEach((el) => {
+            el.style.removeProperty("view-transition-name");
+          });
+
+          return doc.querySelector("main")?.outerHTML || "";
+        });
+
+        const win = window.open("", "_blank");
+        if (!win) {
+          alert("Pop-up blocked by your browser.\nPlease allow pop-ups for this site and try again.\n\n(This works automatically on GitHub Pages — pop-up blockers are stricter inside preview iframes.)");
+          return;
+        }
+        win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>C4 Capstone — Complete Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="${base}/css/pages.css">
+  <style>
+    /* Disable view transitions — names collide across 16 merged pages */
+    @view-transition { navigation: none; }
+    h1, .kicker, .team-badge { view-transition-name: none !important; }
+
+    /* Preserve all colours (SDG badges, stat blocks, etc.) on screen + print */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body { max-width: 820px; margin: 0 auto; padding: 40px 32px; background: #f7f4ec; }
+    .report-section { page-break-after: always; padding-bottom: 48px; margin-bottom: 48px; border-bottom: 2px solid #ddd; }
+    .report-section:last-child { page-break-after: auto; border-bottom: none; }
+    .report-section main { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+    .page-nav, .pdf-fab { display: none !important; }
+
+    @media print {
+      body { background: #fff !important; padding: 0; }
+      .report-section { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  ${sections.map((s) => `<div class="report-section">${s}</div>`).join("\n")}
+  <script>
+    // Wait for every image AND every external stylesheet to fully load,
+    // then wait one extra frame so layout is complete before printing.
+    (function () {
+      function waitImages() {
+        var imgs = Array.from(document.images);
+        return Promise.all(imgs.map(function (img) {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise(function (resolve) {
+            img.addEventListener("load",  resolve, { once: true });
+            img.addEventListener("error", resolve, { once: true });
+          });
+        }));
+      }
+      function waitSheets() {
+        var links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+        return Promise.all(links.map(function (link) {
+          try { if (link.sheet && link.sheet.cssRules) return Promise.resolve(); } catch (e) {}
+          return new Promise(function (resolve) {
+            link.addEventListener("load",  resolve, { once: true });
+            link.addEventListener("error", resolve, { once: true });
+          });
+        }));
+      }
+      window.addEventListener("load", function () {
+        Promise.all([waitImages(), waitSheets()]).then(function () {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              window.print();
+            });
+          });
+        });
+      });
+    })();
+  <\/script>
+</body>
+</html>`);
+        win.document.close();
+      } catch (err) {
+        console.error("[C4] Full report failed", err);
+        alert("Could not generate the report: " + err.message);
+      } finally {
+        btn.textContent = "DOWNLOAD PDF ↓";
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+      }
+    });
+  </script>
+  <script type="module" src="js/main.js?v=15"></script>
+</body>
+</html>
