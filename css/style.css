@@ -472,4 +472,7 @@ body.leaving::after  { opacity: 1; }   /* fade to paper before navigating */
     letter-spacing: 0.22em;
   }
 
+  /* AI disclosure lives in the mobile menu instead of as a floating pill */
+  #ai-disclosure-link { display: none !important; }
+
 }
